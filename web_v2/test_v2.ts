@@ -12,37 +12,52 @@ async function runTest() {
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
 
-    // Capture console errors/logs
+    let statsReceived = false;
+
     page.on('console', msg => {
-        const type = msg.type();
         const text = msg.text();
-        if (type === 'error') {
-            console.error(`[BROWSER ERROR] ${text}`);
-        } else {
+        if (msg.type() === 'error') console.error(`[BROWSER ERROR] ${text}`);
+        else {
             console.log(`[BROWSER LOG] ${text}`);
+            if (text.includes('Received: stats')) statsReceived = true;
         }
-    });
-
-    page.on('pageerror', err => {
-        console.error(`[BROWSER PAGE ERROR] ${err.message}`);
-    });
-
-    page.on('requestfailed', request => {
-        console.error(`[BROWSER REQUEST FAILED] ${request.url()} - ${request.failure()?.errorText}`);
     });
 
     try {
         await page.goto(url, { waitUntil: 'networkidle0' });
-        console.log("[TEST] Page loaded. Waiting 2 seconds for JS execution...");
-        await new Promise(r => setTimeout(r, 2000));
+
+        // --- Test Placeholder Logic ---
+        console.log("[TEST] Testing 'Add Instance' placeholder...");
+        await page.type('#new-name', 'Puppeteer-Test-Instance');
+        await page.click('button.btn-primary');
+
+        // Check if card exists immediately
+        const cardExists = await page.evaluate(() => {
+            return !!document.getElementById('card-Puppeteer-Test-Instance');
+        });
+
+        if (cardExists) {
+            console.log("[TEST] ✅ Placeholder card appeared immediately!");
+        } else {
+            console.error("[TEST] ❌ Placeholder card did NOT appear.");
+        }
+
+        // Wait a bit for stats
+        console.log("[TEST] Waiting for stats logic...");
+        for (let i = 0; i < 20; i++) {
+            if (statsReceived) break;
+            await new Promise(r => setTimeout(r, 500));
+        }
+
+        if (statsReceived) {
+            console.log("[TEST] ✅ Stats verification passed.");
+        }
+
     } catch (e: any) {
-        console.error(`[TEST ERROR] Navigation failed: ${e.message}`);
+        console.error(`[TEST ERROR]: ${e.message}`);
     } finally {
         await browser.close();
     }
 }
 
-runTest().catch(err => {
-    console.error(`[TEST RUNNER ERROR] ${err.message}`);
-    process.exit(1);
-});
+runTest().catch(process.exit);

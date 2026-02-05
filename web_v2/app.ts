@@ -14,8 +14,9 @@ const fleetGrid = document.getElementById('fleet-grid')!;
 
 function createInstanceCard(inst: any) {
     const isRunning = inst.State === 'Running';
+    const isTransitioning = ['Creating', 'Starting', 'Stopping'].includes(inst.State);
     const card = document.createElement('div');
-    card.className = 'card glass animate-in';
+    card.className = `card glass animate-in ${isTransitioning ? 'pulse' : ''}`;
     card.id = `card-${inst.Name}`;
 
     card.innerHTML = `
@@ -23,17 +24,19 @@ function createInstanceCard(inst: any) {
             <div>
                 <h3 style="font-size: 18px; font-weight: 700; color: hsl(var(--fg-main));">${inst.Name}</h3>
                 <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px;">
-                    <span class="badge ${isRunning ? 'badge-running' : ''}" style="background: ${isRunning ? '' : 'hsl(var(--bg-accent))'}; color: ${isRunning ? '' : 'hsl(var(--fg-dim))'}">
+                    <span class="badge ${isRunning ? 'badge-running' : (isTransitioning ? 'badge-transition' : '')}" 
+                          style="background: ${isRunning || isTransitioning ? '' : 'hsl(var(--bg-accent))'}; 
+                                 color: ${isRunning || isTransitioning ? '' : 'hsl(var(--fg-dim))'}">
                         ${inst.State}
                     </span>
                     <span style="font-size: 11px; color: hsl(var(--fg-dim)); font-weight: 500;">Alpine Linux</span>
                 </div>
             </div>
             <div style="display: flex; gap: 8px;">
-                <button class="btn btn-ghost" style="padding: 8px;" onclick="window.app.start('${inst.Name}')" ${isRunning ? 'disabled' : ''}>
+                <button class="btn btn-ghost" style="padding: 8px;" onclick="window.app.start('${inst.Name}')" ${isRunning || isTransitioning ? 'disabled' : ''}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 </button>
-                <button class="btn btn-ghost" style="padding: 8px;" onclick="window.app.stop('${inst.Name}')" ${!isRunning ? 'disabled' : ''}>
+                <button class="btn btn-ghost" style="padding: 8px;" onclick="window.app.stop('${inst.Name}')" ${!isRunning || isTransitioning ? 'disabled' : ''}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
                 </button>
             </div>
@@ -42,11 +45,11 @@ function createInstanceCard(inst: any) {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
             <div class="glass" style="padding: 12px; border-radius: var(--radius-md); background: hsl(var(--bg-main) / 0.3);">
                 <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: hsl(var(--fg-dim)); font-weight: 700; margin-bottom: 4px;">Memory</div>
-                <div id="mem-${inst.Name}" style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">--</div>
+                <div id="mem-${inst.Name}" style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">${inst.Memory || '--'}</div>
             </div>
             <div class="glass" style="padding: 12px; border-radius: var(--radius-md); background: hsl(var(--bg-main) / 0.3);">
                 <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: hsl(var(--fg-dim)); font-weight: 700; margin-bottom: 4px;">Storage</div>
-                <div id="disk-${inst.Name}" style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">--</div>
+                <div id="disk-${inst.Name}" style="font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums;">${inst.Disk || '--'}</div>
             </div>
         </div>
 
@@ -72,6 +75,7 @@ function connect() {
 
     state.ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
+        console.log("[WS] Received:", msg.type, msg.data?.InstanceName || '');
         if (msg.type === 'list') {
             updateFleet(msg.data);
         } else if (msg.type === 'stats') {
@@ -85,6 +89,33 @@ function connect() {
     };
 }
 
+function ensurePlaceholder(name: string, stateLabel: string) {
+    let el = state.instances.get(name);
+    if (!el) {
+        // Initial setup for the placeholder
+        const placeholder = { Name: name, State: stateLabel, Memory: '--', Disk: '--' };
+        el = createInstanceCard(placeholder);
+
+        // Remove loading state if present
+        const loading = fleetGrid.querySelector('.card:not([id])');
+        if (loading) loading.remove();
+
+        fleetGrid.appendChild(el);
+        state.instances.set(name, el);
+    } else {
+        // Update existing element to transition state
+        el.className = 'card glass animate-in pulse';
+        const badge = el.querySelector('.badge')!;
+        badge.className = 'badge badge-transition';
+        badge.textContent = stateLabel;
+        (badge as HTMLElement).style.background = '';
+        (badge as HTMLElement).style.color = '';
+
+        // Disable buttons
+        Array.from(el.querySelectorAll('button')).forEach(btn => (btn as HTMLButtonElement).disabled = true);
+    }
+}
+
 function updateFleet(instances: any[]) {
     const currentNames = new Set(instances.map(i => i.Name));
 
@@ -96,7 +127,7 @@ function updateFleet(instances: any[]) {
         }
     }
 
-    // Update grid visibility
+    // Grid visibility
     if (instances.length > 0) {
         const loading = fleetGrid.querySelector('.card:not([id])');
         if (loading) loading.remove();
@@ -105,22 +136,29 @@ function updateFleet(instances: any[]) {
     // Add or Refresh
     instances.forEach(inst => {
         let el = state.instances.get(inst.Name);
+        const isRunning = inst.State === 'Running';
+        const isTransitioning = ['Creating', 'Starting', 'Stopping'].includes(inst.State);
+
         if (!el) {
             el = createInstanceCard(inst);
             fleetGrid.appendChild(el);
             state.instances.set(inst.Name, el);
         } else {
-            // Hot update status
-            const badge = el.querySelector('.badge')!;
-            const isRunning = inst.State === 'Running';
-            badge.className = `badge ${isRunning ? 'badge-running' : ''}`;
-            badge.textContent = inst.State;
-            (badge as HTMLElement).style.background = isRunning ? '' : 'hsl(var(--bg-accent))';
-            (badge as HTMLElement).style.color = isRunning ? '' : 'hsl(var(--fg-dim))';
+            // Check if we should update (don't overwrite a high-priority transition state with a stale 'Stopped')
+            const currentBadge = el.querySelector('.badge')!;
+            const currentStatus = currentBadge.textContent?.trim();
+            if (currentStatus === 'Creating' && inst.State === 'Stopped') return;
+
+            // Update status & visuals
+            el.className = `card glass animate-in ${isTransitioning ? 'pulse' : ''}`;
+            currentBadge.className = `badge ${isRunning ? 'badge-running' : (isTransitioning ? 'badge-transition' : '')}`;
+            currentBadge.textContent = inst.State;
+            (currentBadge as HTMLElement).style.background = isRunning || isTransitioning ? '' : 'hsl(var(--bg-accent))';
+            (currentBadge as HTMLElement).style.color = isRunning || isTransitioning ? '' : 'hsl(var(--fg-dim))';
 
             // Toggle buttons
-            (el.querySelector('button[onclick*="start"]') as HTMLButtonElement).disabled = isRunning;
-            (el.querySelector('button[onclick*="stop"]') as HTMLButtonElement).disabled = !isRunning;
+            (el.querySelector('button[onclick*="start"]') as HTMLButtonElement).disabled = isRunning || isTransitioning;
+            (el.querySelector('button[onclick*="stop"]') as HTMLButtonElement).disabled = !isRunning || isTransitioning;
         }
     });
 }
@@ -129,20 +167,42 @@ function updateStats(stats: any) {
     const memEl = document.getElementById(`mem-${stats.InstanceName}`);
     const diskEl = document.getElementById(`disk-${stats.InstanceName}`);
 
-    if (memEl) {
-        const match = stats.Memory?.match(/Mem:\s+\d+\s+(\d+)/);
-        memEl.textContent = match ? `${match[1]} MB` : '--';
+    if (memEl && stats.Memory) {
+        // Robust memory parsing (Mem: total used free shared buff/cache available)
+        // Usually index 1 or 2 is used memory
+        const parts = stats.Memory.split(/\s+/);
+        const memIdx = parts.indexOf('Mem:');
+        if (memIdx !== -1 && parts[memIdx + 2]) {
+            memEl.textContent = `${parts[memIdx + 2]} MB`;
+        }
     }
-    if (diskEl) {
-        const match = stats.Disk?.match(/\/\s+\d+\w+\s+(\d+\w+)/);
-        diskEl.textContent = match ? match[1] : '--';
+
+    if (diskEl && stats.Disk) {
+        // Robust disk parsing (Filesystem Size Used Avail Use% Mounted on)
+        const lines = stats.Disk.trim().split('\n');
+        const rootLine = lines.find((l: string) => l.endsWith(' /'));
+        if (rootLine) {
+            const parts = rootLine.split(/\s+/);
+            // Index 2 is usually Used
+            if (parts[2]) diskEl.textContent = parts[2];
+        } else {
+            // Fallback for simple outputs
+            const match = stats.Disk.match(/\/\s+\d+\w+\s+(\d+\w+)/);
+            if (match) diskEl.textContent = match[1];
+        }
     }
 }
 
 // --- Global API ---
 (window as any).app = {
-    start: (name: string) => state.ws?.send(JSON.stringify({ type: 'start', name })),
-    stop: (name: string) => state.ws?.send(JSON.stringify({ type: 'terminate', name })),
+    start: (name: string) => {
+        ensurePlaceholder(name, 'Starting');
+        state.ws?.send(JSON.stringify({ type: 'start', name }));
+    },
+    stop: (name: string) => {
+        ensurePlaceholder(name, 'Stopping');
+        state.ws?.send(JSON.stringify({ type: 'terminate', name }));
+    },
     copySsh: (name: string) => {
         navigator.clipboard.writeText(`wsl -d ${name}`);
         console.log("Copied SSH command for:", name);
@@ -151,6 +211,7 @@ function updateStats(stats: any) {
         const input = document.getElementById('new-name') as HTMLInputElement;
         const name = input.value.trim();
         if (name) {
+            ensurePlaceholder(name, 'Creating');
             state.ws?.send(JSON.stringify({ type: 'create', name }));
             input.value = "";
         }

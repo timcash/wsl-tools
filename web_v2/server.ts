@@ -78,6 +78,8 @@ const server = Bun.serve({
         },
         async message(ws, message) {
             const msg = JSON.parse(message.toString());
+            console.log(`[WS] Action: ${msg.type} on ${msg.name}`);
+
             if (msg.type === 'create') {
                 Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "new", msg.name]);
             } else if (msg.type === 'start') {
@@ -85,6 +87,13 @@ const server = Bun.serve({
             } else if (msg.type === 'terminate') {
                 Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "stop", msg.name]);
             }
+
+            // High-frequency refresh after action
+            setTimeout(async () => {
+                const proc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "list-json"]);
+                const text = await new Response(proc.stdout).text();
+                server.publish("fleet", text.trim() ? JSON.stringify({ type: 'list', data: JSON.parse(text) }) : "");
+            }, 1000);
         }
     }
 });
@@ -94,18 +103,25 @@ Bun.write(".port", server.port.toString());
 
 // --- Monitoring Loop ---
 setInterval(async () => {
-    const listProc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "list-json"]);
-    const listText = await new Response(listProc.stdout).text();
-    let instances = [];
-    try { instances = JSON.parse(listText); } catch (e) { return; }
-    server.publish("fleet", JSON.stringify({ type: 'list', data: instances }));
-    for (const inst of instances) {
-        if (inst.State === 'Running') {
-            const statsProc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "monitor-json", inst.Name]);
-            const statsText = await new Response(statsProc.stdout).text();
-            try {
-                server.publish("fleet", JSON.stringify({ type: 'stats', data: JSON.parse(statsText) }));
-            } catch (e) { }
+    try {
+        const listProc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "list-json"]);
+        const listText = await new Response(listProc.stdout).text();
+        if (!listText.trim()) return;
+
+        const instances = JSON.parse(listText);
+        server.publish("fleet", JSON.stringify({ type: 'list', data: instances }));
+
+        for (const inst of instances) {
+            if (inst.State === 'Running') {
+                const statsProc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "monitor-json", inst.Name]);
+                const statsText = await new Response(statsProc.stdout).text();
+                if (statsText.trim()) {
+                    const stats = JSON.parse(statsText);
+                    server.publish("fleet", JSON.stringify({ type: 'stats', data: stats }));
+                }
+            }
         }
+    } catch (e) {
+        console.error("[MONITOR] Error:", e);
     }
 }, 3000);
