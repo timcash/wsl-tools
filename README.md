@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="wsl_invader.svg" width="300" alt="WSL Tools Invader">
+  <img src="wsl_cpu_network.png" width="300" alt="WSL Tools CPU Network">
 </div>
 
 # WSL Tools
