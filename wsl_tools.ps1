@@ -1,14 +1,21 @@
 param (
     [Parameter(Mandatory = $true, Position = 0)]
-    [string]$InstanceName,
-
-    [Parameter(Mandatory = $true, Position = 1)]
-    [ValidateSet("new", "daemon", "stop", "list", "fetch", "monitor", "list-json", "monitor-json")]
+    [ValidateSet("new", "daemon", "stop", "list", "fetch", "monitor", "list-json", "monitor-json", "dashboard", "ssh")]
     [string]$Command,
+
+    [Parameter(Mandatory = $false, Position = 1)]
+    [string]$InstanceName,
 
     [Parameter(Mandatory = $false, Position = 2)]
     [string]$BaseDistro = "Ubuntu"
 )
+
+# --- Validation for Instance-Specific Commands ---
+$InstanceSpecificCommands = @("new", "daemon", "stop", "monitor", "monitor-json", "ssh")
+if ($InstanceSpecificCommands -contains $Command -and -not $InstanceName) {
+    Write-Error "Command '$Command' requires an instance name. Usage: .\wsl_tools.ps1 $Command <instance_name>"
+    exit 1
+}
 
 # --- Configuration ---
 $WSL_DIR = Join-Path $HOME "WSL"
@@ -24,15 +31,21 @@ if (-not (Test-Path $BASES_DIR)) {
 # --- Helper Functions ---
 function Test-WSLInstanceExists {
     param($Name)
-    # Note: wsl -l --quiet outputs UTF-16LE
-    $existing = wsl.exe -l --quiet | Where-Object { $_ -replace "\0", "" -match "^\s*$Name\b" }
-    return [bool]$existing
+    $lines = wsl.exe -l --quiet
+    # wsl -l --quiet output is often UTF-16LE with null bytes.
+    # We clean it up and check for exact match.
+    foreach ($line in $lines) {
+        $clean = $line -replace "\x00", "" -replace "^\s+", "" -replace "\s+$", ""
+        if ($clean -eq $Name) { return $true }
+    }
+    return $false
 }
 
 function Export-WSLDistro {
     param($Distro, $OutputPath)
     Write-Host "Exporting $Distro to $OutputPath..." -ForegroundColor Gray
     wsl.exe --export $Distro $OutputPath
+    if ($LASTEXITCODE -ne 0) { throw "wsl --export failed with code $LASTEXITCODE" }
 }
 
 function Import-WSLDistro {
@@ -42,6 +55,7 @@ function Import-WSLDistro {
         New-Item -ItemType Directory -Path $InstallPath | Out-Null
     }
     wsl.exe --import $Name $InstallPath $SourcePath
+    if ($LASTEXITCODE -ne 0) { throw "wsl --import failed with code $LASTEXITCODE" }
 }
 
 # --- Command Functions ---
@@ -166,7 +180,9 @@ function New-WSLInstance {
             Write-Host "Instance '$Name' created successfully." -ForegroundColor Green
         }
         catch {
-            Write-Error "Failed to create WSL instance: $_"
+            Write-Error "Failed to create WSL instance '$Name' from '$Base': $_"
+            # Cleanup on failure if the directory was created
+            if (Test-Path $InstallPath) { Remove-Item $InstallPath -Recurse -Force -ErrorAction SilentlyContinue }
         }
         finally {
             if (Test-Path $TempTar) { Remove-Item $TempTar -Force }
@@ -221,4 +237,32 @@ switch ($Command) {
     "fetch" { Save-WSLBase -Type $BaseDistro }
     "monitor" { Measure-WSLInstance -Name $InstanceName -AsJson $false }
     "monitor-json" { Measure-WSLInstance -Name $InstanceName -AsJson $true }
+    "dashboard" {
+        $WebDir = Join-Path $PSScriptRoot "web_v2"
+        Write-Host "--- Dashboard Diagnostics (v2) ---" -ForegroundColor Gray
+        
+        # 1. Check for running Bun processes
+        $BunProcs = Get-Process -Name bun -ErrorAction SilentlyContinue
+        if ($BunProcs) {
+            Write-Host "[INFO] Detected $($BunProcs.Count) running Bun process(es):" -ForegroundColor Yellow
+            $BunProcs | Select-Object Id, ProcessName, @{N = 'Path'; E = { $_.MainModule.FileName } } | Format-Table -AutoSize
+        }
+        else {
+            Write-Host "[OK] No conflicting Bun processes found." -ForegroundColor Green
+        }
+
+        # 2. Check for port conflicts (Defaulting to check 3000 as common dashboard port)
+        # Note: server.ts uses port 0 (dynamic), but user might be concerned about specific ports if they customize
+        $Conflict = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }
+        if ($Conflict) {
+            Write-Warning "Port 3000 is already in use by PID $($Conflict.OwningProcess)."
+        }
+
+        Write-Host "`nStarting WSL Dashboard from $WebDir..." -ForegroundColor Cyan
+        Set-Location $WebDir
+        bun start
+    }
+    "ssh" {
+        wsl.exe -d $InstanceName
+    }
 }

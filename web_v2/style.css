@@ -1,0 +1,221 @@
+:root {
+    /* Premium Midnight Palette */
+    --bg-main: 240 10% 4%;
+    --bg-card: 240 10% 7%;
+    --bg-accent: 240 10% 12%;
+
+    --fg-main: 0 0% 98%;
+    --fg-muted: 240 5% 65%;
+    --fg-dim: 240 5% 45%;
+
+    --primary: 217 91% 60%;
+    /* Hyper Blue */
+    --primary-glow: 217 91% 60% / 0.15;
+
+    --success: 142 71% 45%;
+    /* Emerald */
+    --success-glow: 142 71% 45% / 0.15;
+
+    --danger: 0 84% 60%;
+    --border: 240 5% 15%;
+
+    --radius-lg: 12px;
+    --radius-md: 8px;
+    --radius-sm: 4px;
+
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 10px;
+}
+
+body {
+    background-color: hsl(var(--bg-main));
+    color: hsl(var(--fg-main));
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    overflow-x: hidden;
+    line-height: 1.6;
+}
+
+/* Glassmorphism primitives */
+.glass {
+    background: hsla(var(--bg-card), 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid hsl(var(--border) / 0.5);
+}
+
+.card {
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.5), transparent);
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.card:hover::before {
+    opacity: 1;
+}
+
+.card:hover {
+    border-color: hsl(var(--primary) / 0.4);
+    box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.5);
+    transform: translateY(-2px);
+}
+
+.btn {
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn:active {
+    transform: scale(0.96);
+}
+
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+.btn-primary {
+    background: hsl(var(--primary));
+    color: white;
+    box-shadow: 0 4px 12px hsl(var(--primary) / 0.3);
+}
+
+.btn-primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 8px 20px hsl(var(--primary) / 0.4);
+}
+
+.btn-ghost {
+    background: transparent;
+    border-color: hsl(var(--border));
+    color: hsl(var(--fg-muted));
+}
+
+.btn-ghost:hover {
+    background: hsl(var(--bg-accent));
+    color: hsl(var(--fg-main));
+}
+
+.badge {
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.badge-running {
+    background: hsla(var(--success), 0.1);
+    color: hsl(var(--success));
+    border: 1px solid hsla(var(--success), 0.2);
+}
+
+.input {
+    background: hsl(var(--bg-card));
+    border: 1px solid hsl(var(--border));
+    color: white;
+    padding: 10px 16px;
+    border-radius: var(--radius-md);
+    outline: none;
+    transition: var(--transition);
+    font-size: 14px;
+}
+
+.input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 4px hsl(var(--primary) / 0.1);
+}
+
+.input::placeholder {
+    color: hsl(var(--fg-dim));
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Header */
+header {
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 40px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo {
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo span {
+    background: linear-gradient(135deg, hsl(var(--primary)), #a855f7);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
