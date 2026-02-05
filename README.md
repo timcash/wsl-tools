@@ -3,6 +3,7 @@
 </div>
 
 # WSL Tools
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
 A modular PowerShell utility for managing WSL instances. It facilitates cloning distributions, running background services (daemonization), and managing instance lifecycles using standard `wsl.exe` commands.
 
