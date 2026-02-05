@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WSL Operations</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         :root {
             /* Muted Grey Palette */
@@ -44,6 +45,25 @@
             border-bottom: 1px solid var(--border);
         }
 
+        .metrics {
+            display: flex;
+            gap: 20px;
+            flex-grow: 1;
+            align-items: center;
+        }
+
+        .quick-command {
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #aaa;
+            border: 1px solid #444;
+            width: 180px;
+            cursor: copy;
+        }
+
         h1 {
             font-weight: 500;
             font-size: 24px;
@@ -56,33 +76,6 @@
             font-weight: 400;
             margin-left: 10px;
             font-size: 16px;
-        }
-
-        #grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 24px;
-        }
-
-        .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .card-name {
-            font-size: 16px;
-            font-weight: 600;
         }
 
         .status-dot {
@@ -98,32 +91,105 @@
             box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.1);
         }
 
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 32px;
+            background: var(--surface);
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        input[type="text"] {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 4px;
+            flex-grow: 1;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--accent-running);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        .btn-primary {
+            background: var(--accent-running);
+            color: #fff;
+        }
+
+        .btn-success {
+            background: #2e7d32;
+            color: #fff;
+        }
+
+        .btn-danger {
+            background: #d32f2f;
+            color: #fff;
+        }
+
+        .btn:disabled {
+            background: #333;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        #grid {
+            display: flex;
+            flex-direction: column;
             gap: 16px;
         }
 
-        .metric {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 24px;
+            display: grid;
+            grid-template-columns: 180px 100px 1fr 200px 100px;
+            align-items: center;
+            gap: 24px;
         }
 
-        .metric-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+        .card-name {
+            font-size: 16px;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .metrics-grid {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
-        .metric-value {
-            font-family: 'SF Mono', 'Consolas', monospace;
-            font-size: 13px;
-            color: var(--text-main);
-            white-space: nowrap;
+        .graph-container {
+            height: 40px;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 4px;
             overflow: hidden;
-            text-overflow: ellipsis;
+        }
+
+        .bar {
+            fill: var(--accent-running);
         }
 
         .offline-text {
@@ -141,21 +207,51 @@
             <h1>WSL Operations <span>Instance Monitor</span></h1>
         </header>
 
+        <div class="actions">
+            <input type="text" id="newInstanceName" placeholder="New instance name...">
+            <button onclick="createInstance()" class="btn btn-primary" id="addBtn">Add Instance</button>
+        </div>
+
         <div id="grid">
-            <!-- Cards -->
+            <!-- Rows -->
         </div>
     </div>
 
     <script>
         const grid = document.getElementById('grid');
-        const ws = new WebSocket(`ws://${location.host}/ws`);
+        window.ws = new WebSocket(`ws://${location.host}/ws`);
         const cards = new Map();
+        const history = new Map(); // Store history for stats: name -> [values]
+        const MAX_HISTORY = 40;
 
         ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             if (msg.type === 'list') updateList(msg.data);
             if (msg.type === 'stats') updateStats(msg.data);
         };
+
+        function createInstance() {
+            const input = document.getElementById('newInstanceName');
+            const name = input.value.trim();
+            if (name) {
+                ws.send(JSON.stringify({ type: 'create', name }));
+                input.value = '';
+                // Disable button for a moment
+                const btn = document.getElementById('addBtn');
+                btn.disabled = true;
+                setTimeout(() => btn.disabled = false, 2000);
+            }
+        }
+
+        function startInstance(name) {
+            ws.send(JSON.stringify({ type: 'start', name }));
+        }
+
+        function terminateInstance(name) {
+            if (confirm(`Terminate ${name}?`)) {
+                ws.send(JSON.stringify({ type: 'terminate', name }));
+            }
+        }
 
         function updateList(instances) {
             const activeNames = new Set(instances.map(i => i.Name));
@@ -165,6 +261,7 @@
                 if (!activeNames.has(name)) {
                     el.remove();
                     cards.delete(name);
+                    history.delete(name);
                 }
             }
 
@@ -177,24 +274,41 @@
                     card = document.createElement('div');
                     card.className = 'card';
                     card.innerHTML = `
-                        <div class="card-header">
-                            <div class="card-name">${inst.Name}</div>
-                            <div class="status-dot ${isRunning ? 'running' : ''}"></div>
+                        <div class="card-name" title="${inst.Name}">${inst.Name}</div>
+                        <div class="status-dot ${isRunning ? 'running' : ''}" style="margin: 0 auto;"></div>
+                        <div class="metrics">
+                            <div class="metrics-grid" id="stats-${inst.Name}">
+                                ${isRunning ? getLoader() : getOffline()}
+                            </div>
+                            <div class="stat-group">
+                                <div class="stat-label">SSH Command</div>
+                                <input type="text" class="quick-command" value="wsl -d ${inst.Name}" readonly onclick="this.select(); document.execCommand('copy');">
+                            </div>
                         </div>
-                        <div class="metrics-grid" id="stats-${inst.Name}">
-                            ${isRunning ? getLoader() : getOffline()}
+                        <div class="graph-container" id="graph-${inst.Name}">
+                            <svg width="100%" height="40"></svg>
+                        </div>
+                        <div style="text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                            <button class="btn btn-success" onclick="startInstance('${inst.Name}')" ${isRunning ? 'disabled' : ''}>Start</button>
+                            <button class="btn btn-danger" onclick="terminateInstance('${inst.Name}')" ${!isRunning ? 'disabled' : ''}>Stop</button>
                         </div>
                     `;
                     grid.appendChild(card);
                     cards.set(inst.Name, card);
+                    history.set(inst.Name, new Array(MAX_HISTORY).fill(0));
                 } else {
-                    // Update Status Dot Only
                     const dot = card.querySelector('.status-dot');
                     dot.className = `status-dot ${isRunning ? 'running' : ''}`;
+                    const startBtn = card.querySelector('.btn-success');
+                    startBtn.disabled = isRunning;
+                    const stopBtn = card.querySelector('.btn-danger');
+                    stopBtn.disabled = !isRunning;
 
-                    // If stopped, force offline view
                     if (!isRunning) {
                         card.querySelector('.metrics-grid').innerHTML = getOffline();
+                        const historyArr = history.get(inst.Name);
+                        if (historyArr) historyArr.fill(0);
+                        updateGraph(inst.Name);
                     }
                 }
             });
@@ -204,48 +318,60 @@
             const card = cards.get(data.Name);
             if (!card) return;
 
+            const memInfo = extractMemInfo(data.Memory);
             const gridDiv = card.querySelector('.metrics-grid');
             gridDiv.innerHTML = `
-                <div class="metric">
-                    <span class="metric-label">Memory</span>
-                    <span class="metric-value">${extractMem(data.Memory)}</span>
-                </div>
-                <div class="metric">
-                    <span class="metric-label">Disk</span>
-                    <span class="metric-value">${extractDisk(data.Disk)}</span>
-                </div>
-                <div class="metric" style="grid-column: 1 / -1">
-                    <span class="metric-label">Network</span>
-                    <span class="metric-value">${extractNet(data.Network)}</span>
-                </div>
-                <div class="metric" style="grid-column: 1 / -1">
-                    <span class="metric-label">Uptime</span>
-                    <span class="metric-value">${data.Uptime || '-'}</span>
-                </div>
+                <span>RAM: ${memInfo.used} / ${memInfo.total}MB</span>
+                <span>Uptime: ${data.Uptime?.split(',')[0] || '-'}</span>
             `;
-        }
 
-        function getLoader() {
-            return `
-                <div class="offline-text" style="grid-column: 1 / -1">Connecting to daemon...</div>
-            `;
-        }
-
-        function getOffline() {
-            return `
-                <div class="offline-text" style="grid-column: 1 / -1">System Halted</div>
-            `;
-        }
-
-        function extractMem(raw) {
-            if (!raw) return '-';
-            const match = raw.match(/Mem:\s+(\d+)\s+(\d+)/); // Total, Used
-            if (match) {
-                const total = Math.round(match[1] / 1024); // to MB
-                const used = Math.round(match[2] / 1024); // to MB
-                return `${used}MB / ${total}MB`;
+            // Update history and graph
+            const hist = history.get(data.Name);
+            if (hist) {
+                const percent = memInfo.total > 0 ? (memInfo.used / memInfo.total) * 100 : 0;
+                hist.push(percent);
+                if (hist.length > MAX_HISTORY) hist.shift();
+                updateGraph(data.Name);
             }
-            return '-';
+        }
+
+        function updateGraph(name) {
+            const hist = history.get(name);
+            const container = document.getElementById(`graph-${name}`);
+            if (!container || !hist) return;
+
+            const svg = d3.select(container).select('svg');
+            const width = container.clientWidth;
+            const height = 40;
+            const barWidth = width / MAX_HISTORY;
+
+            const x = d3.scaleLinear().domain([0, MAX_HISTORY]).range([0, width]);
+            const y = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+
+            const bars = svg.selectAll('.bar').data(hist);
+
+            bars.enter()
+                .append('rect')
+                .attr('class', 'bar')
+                .merge(bars)
+                .attr('x', (d, i) => i * barWidth)
+                .attr('y', d => y(d))
+                .attr('width', Math.max(0, barWidth - 1))
+                .attr('height', d => height - y(d));
+
+            bars.exit().remove();
+        }
+
+        function getLoader() { return `<div class="offline-text">Wait...</div>`; }
+        function getOffline() { return `<div class="offline-text">Halted</div>`; }
+
+        function extractMemInfo(raw) {
+            if (!raw) return { used: 0, total: 0 };
+            const match = raw.match(/Mem:\s+(\d+)\s+(\d+)/);
+            if (match) {
+                return { total: Math.round(match[1] / 1024), used: Math.round(match[2] / 1024) };
+            }
+            return { used: 0, total: 0 };
         }
 
         function extractDisk(raw) {

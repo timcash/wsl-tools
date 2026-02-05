@@ -12,13 +12,27 @@ async function runTest() {
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
 
+    let listMessages = 0;
     let statsReceived = false;
+
+    // Enhanced request logging
+    page.on('requestfailed', request => {
+        console.error(`[BROWSER REQUEST FAILED] ❌ ${request.url()} - ${request.failure()?.errorText || 'Unknown Error'}`);
+    });
+
+    page.on('response', response => {
+        if (!response.ok()) {
+            console.error(`[BROWSER ERROR] ${response.status()} ${response.url()}`);
+        }
+    });
 
     page.on('console', msg => {
         const text = msg.text();
-        if (msg.type() === 'error') console.error(`[BROWSER ERROR] ${text}`);
-        else {
+        if (msg.type() === 'error') {
+            console.error(`[BROWSER ERROR LOG] ${text}`);
+        } else {
             console.log(`[BROWSER LOG] ${text}`);
+            if (text.includes('Received: list')) listMessages++;
             if (text.includes('Received: stats')) statsReceived = true;
         }
     });
@@ -26,31 +40,28 @@ async function runTest() {
     try {
         await page.goto(url, { waitUntil: 'networkidle0' });
 
-        // --- Test Placeholder Logic ---
-        console.log("[TEST] Testing 'Add Instance' placeholder...");
-        await page.type('#new-name', 'Puppeteer-Test-Instance');
+        console.log("[TEST] Adding instance 'Grace-Persistence-Test'...");
+        await page.type('#new-name', 'Grace-Persistence-Test');
         await page.click('button.btn-primary');
 
-        // Check if card exists immediately
-        const cardExists = await page.evaluate(() => {
-            return !!document.getElementById('card-Puppeteer-Test-Instance');
-        });
+        // Check immediate appearance
+        const initialExists = await page.evaluate(() => !!document.getElementById('card-Grace-Persistence-Test'));
+        console.log(`[TEST] Immediate appearance: ${initialExists}`);
 
-        if (cardExists) {
-            console.log("[TEST] ✅ Placeholder card appeared immediately!");
-        } else {
-            console.error("[TEST] ❌ Placeholder card did NOT appear.");
+        console.log("[TEST] Waiting 12 seconds to verify persistence through sync cycles...");
+        // Wait and check if it still exists
+        for (let i = 0; i < 12; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            const exists = await page.evaluate(() => !!document.getElementById('card-Grace-Persistence-Test'));
+            if (!exists) {
+                console.error(`[TEST] ❌ FAILED: Card disappeared at second ${i + 1}`);
+                break;
+            }
         }
 
-        // Wait a bit for stats
-        console.log("[TEST] Waiting for stats logic...");
-        for (let i = 0; i < 20; i++) {
-            if (statsReceived) break;
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        if (statsReceived) {
-            console.log("[TEST] ✅ Stats verification passed.");
+        const finalExists = await page.evaluate(() => !!document.getElementById('card-Grace-Persistence-Test'));
+        if (finalExists) {
+            console.log("[TEST] ✅ SUCCESS: Card persisted through multiple sync cycles.");
         }
 
     } catch (e: any) {

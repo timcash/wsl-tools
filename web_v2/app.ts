@@ -4,8 +4,12 @@
 
 const state = {
     instances: new Map<string, HTMLElement>(),
+    // Keep track of instances in transition to prevent premature removal
+    transitions: new Map<string, { state: string, stamp: number }>(),
     ws: null as WebSocket | null,
 };
+
+const GRACE_PERIOD_MS = 15000; // 15 seconds for WSL operations
 
 // --- DOM References ---
 const fleetGrid = document.getElementById('fleet-grid')!;
@@ -75,7 +79,6 @@ function connect() {
 
     state.ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        console.log("[WS] Received:", msg.type, msg.data?.InstanceName || '');
         if (msg.type === 'list') {
             updateFleet(msg.data);
         } else if (msg.type === 'stats') {
@@ -90,6 +93,9 @@ function connect() {
 }
 
 function ensurePlaceholder(name: string, stateLabel: string) {
+    // Record transition
+    state.transitions.set(name, { state: stateLabel, stamp: Date.now() });
+
     let el = state.instances.get(name);
     if (!el) {
         // Initial setup for the placeholder
@@ -117,42 +123,61 @@ function ensurePlaceholder(name: string, stateLabel: string) {
 }
 
 function updateFleet(instances: any[]) {
+    const now = Date.now();
     const currentNames = new Set(instances.map(i => i.Name));
 
-    // Remove old
+    // 1. Reconcile Transitions
+    instances.forEach(inst => {
+        const trans = state.transitions.get(inst.Name);
+        if (trans) {
+            // If server now matches or has advanced, clear bridge
+            if (inst.State === 'Running' || (trans.state === 'Stopping' && inst.State === 'Stopped')) {
+                state.transitions.delete(inst.Name);
+            }
+        }
+    });
+
+    // 2. Removal Logic with Grace Period
     for (const [name, el] of state.instances) {
         if (!currentNames.has(name)) {
+            const trans = state.transitions.get(name);
+            // If we are "Creating", don't remove unless grace period expired
+            if (trans && trans.state === 'Creating' && (now - trans.stamp < GRACE_PERIOD_MS)) {
+                continue;
+            }
+
             el.remove();
             state.instances.delete(name);
+            state.transitions.delete(name);
         }
     }
 
     // Grid visibility
-    if (instances.length > 0) {
+    if (instances.length > 0 || state.transitions.size > 0) {
         const loading = fleetGrid.querySelector('.card:not([id])');
         if (loading) loading.remove();
     }
 
-    // Add or Refresh
+    // 3. Add or Refresh
     instances.forEach(inst => {
+        const trans = state.transitions.get(inst.Name);
         let el = state.instances.get(inst.Name);
-        const isRunning = inst.State === 'Running';
-        const isTransitioning = ['Creating', 'Starting', 'Stopping'].includes(inst.State);
+
+        // If we are in transition, don't let stale server list overwrite UI
+        const displayState = trans ? trans.state : inst.State;
+        const isRunning = displayState === 'Running';
+        const isTransitioning = ['Creating', 'Starting', 'Stopping'].includes(displayState);
 
         if (!el) {
-            el = createInstanceCard(inst);
+            el = createInstanceCard({ ...inst, State: displayState });
             fleetGrid.appendChild(el);
             state.instances.set(inst.Name, el);
         } else {
-            // Check if we should update (don't overwrite a high-priority transition state with a stale 'Stopped')
-            const currentBadge = el.querySelector('.badge')!;
-            const currentStatus = currentBadge.textContent?.trim();
-            if (currentStatus === 'Creating' && inst.State === 'Stopped') return;
-
             // Update status & visuals
             el.className = `card glass animate-in ${isTransitioning ? 'pulse' : ''}`;
+            const currentBadge = el.querySelector('.badge')!;
             currentBadge.className = `badge ${isRunning ? 'badge-running' : (isTransitioning ? 'badge-transition' : '')}`;
-            currentBadge.textContent = inst.State;
+            currentBadge.textContent = displayState;
             (currentBadge as HTMLElement).style.background = isRunning || isTransitioning ? '' : 'hsl(var(--bg-accent))';
             (currentBadge as HTMLElement).style.color = isRunning || isTransitioning ? '' : 'hsl(var(--fg-dim))';
 
@@ -168,8 +193,6 @@ function updateStats(stats: any) {
     const diskEl = document.getElementById(`disk-${stats.InstanceName}`);
 
     if (memEl && stats.Memory) {
-        // Robust memory parsing (Mem: total used free shared buff/cache available)
-        // Usually index 1 or 2 is used memory
         const parts = stats.Memory.split(/\s+/);
         const memIdx = parts.indexOf('Mem:');
         if (memIdx !== -1 && parts[memIdx + 2]) {
@@ -178,15 +201,12 @@ function updateStats(stats: any) {
     }
 
     if (diskEl && stats.Disk) {
-        // Robust disk parsing (Filesystem Size Used Avail Use% Mounted on)
         const lines = stats.Disk.trim().split('\n');
         const rootLine = lines.find((l: string) => l.endsWith(' /'));
         if (rootLine) {
             const parts = rootLine.split(/\s+/);
-            // Index 2 is usually Used
             if (parts[2]) diskEl.textContent = parts[2];
         } else {
-            // Fallback for simple outputs
             const match = stats.Disk.match(/\/\s+\d+\w+\s+(\d+\w+)/);
             if (match) diskEl.textContent = match[1];
         }

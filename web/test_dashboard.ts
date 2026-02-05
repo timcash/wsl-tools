@@ -39,7 +39,7 @@ function logToFile(message: string) {
     });
 
     // 2. Page Error Interception (Uncaught Exceptions)
-    page.on('pageerror', err => {
+    page.on('pageerror', (err: any) => {
         logToFile(`[Browser Uncaught Exception] ${err.toString()}`);
     });
 
@@ -48,10 +48,20 @@ function logToFile(message: string) {
         let port = 3000;
         try {
             port = parseInt(fs.readFileSync(".port", "utf8"));
-        } catch (e) {
+        } catch (e: any) {
             logToFile("⚠️ Could not read .port file, defaulting to 3000");
         }
         const url = `http://localhost:${port}`;
+
+        // Track WebSockets
+        const client = await page.target().createCDPSession();
+        await client.send('Network.enable');
+        client.on('Network.webSocketFrameReceived', (params: any) => {
+            logToFile(`[WS Received] ${params.response.payloadData}`);
+        });
+        client.on('Network.webSocketFrameSent', (params: any) => {
+            logToFile(`[WS Sent] ${params.response.payloadData}`);
+        });
 
         logToFile(`🌐 Navigating to ${url}...`);
         await page.goto(url, { waitUntil: 'networkidle0' });
@@ -84,23 +94,87 @@ function logToFile(message: string) {
         logToFile('✅ Image loaded successfully.');
 
         // 5. Screenshot
-        logToFile('📸 Taking screenshot...');
-        await page.screenshot({ path: 'dashboard_screenshot.png', fullPage: true });
-        logToFile('✅ Screenshot saved to dashboard_screenshot.png');
+        logToFile('📸 Taking initial screenshot...');
+        await page.screenshot({ path: 'dashboard_pre_test.png', fullPage: true });
 
-        // 5. Simulate Error
-        logToFile('🧪 Injecting test error...');
-        await page.evaluate(() => {
-            setTimeout(() => {
-                throw new Error("Simulated Test Error for Verification");
-            }, 100);
-        });
+        // 6. Test Add Instance
+        const testInstanceName = `test-run-${Math.floor(Math.random() * 1000)}`;
+        logToFile(`🧪 Testing Add Instance: "${testInstanceName}"...`);
+
+        await page.type('#newInstanceName', testInstanceName);
+        await page.click('#addBtn');
+        logToFile('🖱️ Clicked "Add Instance" button.');
+
+        // 7. Wait for the instance to appear (Alpine creation is fast)
+        logToFile('⏳ Waiting for Alpine instance to appear...');
+        await page.waitForFunction(
+            (name) => {
+                const cards = Array.from(document.querySelectorAll('.card-name'));
+                return cards.some(c => c.textContent?.trim() === name);
+            },
+            { timeout: 30000 },
+            testInstanceName
+        );
+        logToFile(`✅ Instance "${testInstanceName}" appeared.`);
+
+        // 8. Start the instance
+        logToFile(`🚀 Starting instance "${testInstanceName}"...`);
+        await page.evaluate((name) => {
+            const cards = Array.from(document.querySelectorAll('.card'));
+            const card = cards.find(c => c.querySelector('.card-name')?.textContent?.trim() === name);
+            const startBtn = card?.querySelector('.btn-success') as HTMLButtonElement;
+            if (startBtn) startBtn.click();
+        }, testInstanceName);
+
+        // 9. Wait for "Running" status
+        logToFile('⏳ Waiting for "Running" state...');
+        await page.waitForFunction(
+            (name) => {
+                const card = Array.from(document.querySelectorAll('.card')).find(c => c.querySelector('.card-name')?.textContent?.trim() === name);
+                return card?.querySelector('.status-dot')?.classList.contains('running');
+            },
+            { timeout: 20000 },
+            testInstanceName
+        );
+        logToFile('✅ Instance is Running.');
+
+        // 10. Provision: Install git and clone dialtone (Following test_complex_setup.ps1 logic)
+        logToFile('🛠️ Provisioning: Installing git/bash and cloning "dialtone"...');
+        await page.evaluate((name) => {
+            // @ts-ignore
+            window.ws.send(JSON.stringify({
+                type: 'shell',
+                name,
+                cmd: 'apk update && apk add git bash'
+            }));
+        }, testInstanceName);
+
+        logToFile('⏳ Waiting 15s for packages to install...');
+        await new Promise(r => setTimeout(r, 15000));
+
+        await page.evaluate((name) => {
+            // @ts-ignore
+            window.ws.send(JSON.stringify({
+                type: 'shell',
+                name,
+                cmd: 'git clone https://github.com/timcash/dialtone /root/dialtone'
+            }));
+        }, testInstanceName);
+
+        logToFile('⏳ Waiting 10s for git clone...');
+        await new Promise(r => setTimeout(r, 10000));
+
+        // 11. Final Verification & Screenshot
+        logToFile('📸 Taking final screenshot after provisioning...');
+        await page.screenshot({ path: 'dashboard_final.png', fullPage: true });
+
+        logToFile('🏁 Test lifecycle complete.');
 
         // Give it a moment to throw and be caught
         await new Promise(r => setTimeout(r, 500));
 
-    } catch (err) {
-        logToFile(`❌ Test Failed: ${err}`);
+    } catch (err: any) {
+        logToFile(`❌ Test Failed: ${err.message || err}`);
         process.exit(1);
     } finally {
         await browser.close();

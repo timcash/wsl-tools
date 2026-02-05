@@ -1,16 +1,29 @@
-// import index from "./index.html"; // Bundler modifies asset paths, breaking manual routing
-const index = Bun.file("./index.html");
-
 const PS_SCRIPT = "..\\wsl_tools.ps1";
 import { join } from "path";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 
-const IMAGE_PATH = join(import.meta.dir, "wsl_cpu_network.png");
-console.log(`[DEBUG] Image path: ${IMAGE_PATH}, Exists: ${existsSync(IMAGE_PATH)}`);
+// --- Frontend Build ---
+const CLIENT_DIR = join(import.meta.dir, "client");
+const DIST_DIR = join(CLIENT_DIR, "dist");
+if (!existsSync(DIST_DIR)) mkdirSync(DIST_DIR, { recursive: true });
+
+console.log(`[BUILD] Bundling Shadcn React frontend...`);
+const buildResult = await Bun.build({
+    entrypoints: [join(CLIENT_DIR, "index.html")],
+    outdir: DIST_DIR,
+    minify: true,
+});
+
+if (!buildResult.success) {
+    console.error("[BUILD] Failed to bundle frontend:", buildResult.logs);
+}
+
+const indexFile = Bun.file(join(DIST_DIR, "index.html"));
+const ALPINE_BASE = join(process.env.USERPROFILE || "", "WSL", "_bases", "alpine.tar.gz");
 
 // ... helper functions getWSLList, getWSLMonitor ...
 async function getWSLList() {
-    const proc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "_", "list-json"], {
+    const proc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "list-json"], {
         stdout: "pipe",
     });
     const text = await new Response(proc.stdout).text();
@@ -22,7 +35,7 @@ async function getWSLList() {
 }
 
 async function getWSLMonitor(name: string) {
-    const proc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, name, "monitor-json"], {
+    const proc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "monitor-json", name], {
         stdout: "pipe",
     });
     const text = await new Response(proc.stdout).text();
@@ -38,14 +51,22 @@ import { write } from "bun";
 const port = 0; // Let Bun/OS pick a free port
 const server = Bun.serve({
     port: port,
-    routes: {
-        "/": index,
-        "/wsl_cpu_network.png": Bun.file(IMAGE_PATH),
-    },
-    fetch(req, server) {
+    async fetch(req, server) {
         if (server.upgrade(req)) {
             return;
         }
+
+        const url = new URL(req.url);
+        if (url.pathname === "/" || url.pathname === "/index.html") {
+            return new Response(indexFile);
+        }
+
+        // Serve static assets from the build directory
+        const filePath = join(DIST_DIR, url.pathname);
+        if (existsSync(filePath)) {
+            return new Response(Bun.file(filePath));
+        }
+
         return new Response("Not Found", { status: 404 });
     },
     websocket: {
@@ -55,7 +76,39 @@ const server = Bun.serve({
             const list = await getWSLList();
             ws.send(JSON.stringify({ type: "list", data: list }));
         },
-        message(ws, message) { },
+        async message(ws, message) {
+            try {
+                const msg = JSON.parse(message.toString());
+                if (msg.type === "create") {
+                    console.log(`[WS] Creating instance: ${msg.name} from Alpine`);
+                    Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "new", msg.name, ALPINE_BASE], {
+                        stdout: "inherit",
+                        stderr: "inherit",
+                    });
+                } else if (msg.type === "start") {
+                    console.log(`[WS] Starting instance: ${msg.name}`);
+                    // Start directly to avoid Start-Job persistency issues
+                    Bun.spawn(["wsl", "-d", msg.name, "--", "exec", "sleep", "infinity"], {
+                        stdout: "ignore",
+                        stderr: "inherit",
+                    });
+                } else if (msg.type === "terminate") {
+                    console.log(`[WS] Terminating instance: ${msg.name}`);
+                    Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "stop", msg.name], {
+                        stdout: "inherit",
+                        stderr: "inherit",
+                    });
+                } else if (msg.type === "shell") {
+                    console.log(`[WS] Running shell command in ${msg.name}: ${msg.cmd}`);
+                    Bun.spawn(["wsl", "-d", msg.name, "sh", "-c", msg.cmd], {
+                        stdout: "inherit",
+                        stderr: "inherit",
+                    });
+                }
+            } catch (e) {
+                console.error("[WS] Failed to parse message", e);
+            }
+        },
     },
 });
 

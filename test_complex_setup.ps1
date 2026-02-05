@@ -8,12 +8,12 @@ Write-Host "Target Instance: $TestInstance" -ForegroundColor Cyan
 # 0. Fetch initial base if not present
 if (-not (Test-Path $BaseTarball)) {
     Write-Host "Alpine base not found. Fetching..." -ForegroundColor Yellow
-    .\wsl_tools.ps1 alpine fetch
+    .\wsl_tools.ps1 fetch alpine
 }
 
 # 1. Listing before
 Write-Host "`n1. Listing existing WSL instances:" -ForegroundColor Yellow
-.\wsl_tools.ps1 _ list
+.\wsl_tools.ps1 list
 
 # 2. Create new instance
 Write-Host "`n2. Creating new instance '$TestInstance' from '$BaseTarball'..." -ForegroundColor Yellow
@@ -21,7 +21,7 @@ Write-Host "`n2. Creating new instance '$TestInstance' from '$BaseTarball'..." -
 if (wsl.exe -l --quiet | Select-String -Pattern $TestInstance) {
     wsl.exe --unregister $TestInstance 2>$null
 }
-.\wsl_tools.ps1 $TestInstance new $BaseTarball
+.\wsl_tools.ps1 new $TestInstance $BaseTarball
 
 # 3. Listing after
 Write-Host "`n3. Verifying new instance exists in list:" -ForegroundColor Yellow

@@ -5,24 +5,47 @@
 # WSL Tools
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
 
-A modular PowerShell utility for managing WSL instances. It facilitates cloning distributions, running background services (daemonization), and managing instance lifecycles using standard `wsl.exe` commands.
+A robust management suite for WSL instances, optimizing lifecycles using Alpine Linux and real-time monitoring.
 
 ---
 
-## Quick Start
+## Quick Start (Alpine Minimal)
 
-1.  **Fetch Alpine Linux** (Minimal rootfs):
+1.  **Start Dashboard**:
+    ```powershell
+    .\wsl_tools.ps1 dashboard
+    ```
+2.  **Fetch Alpine rootfs**:
     ```powershell
     .\wsl_tools.ps1 alpine fetch
     ```
-2.  **Create Instance**:
+2.  **Create & Start Environment**:
     ```powershell
-    .\wsl_tools.ps1 my-dev-env new ~/WSL/_bases/alpine.tar.gz
+    # Creates an Alpine instance (nearly instant)
+    .\wsl_tools.ps1 new my-env
+    # Starts the instance in the background
+    .\wsl_tools.ps1 daemon my-env
     ```
-3.  **Daemonize**:
-    ```powershell
-    .\wsl_tools.ps1 my-dev-env daemon
-    ```
+
+---
+
+## Web Dashboard
+
+A real-time fleet management interface with row-based metrics and D3.js visualizations.
+
+### Features
+- **Instant Lifecycles**: Default Alpine-based creation in seconds.
+- **Daemon Control**: Start/Stop instances directly from the browser.
+- **Provisioning**: execute shell commands (e.g., `apk add git`) via WebSocket.
+- **Live Graphs**: Moving-window D3.js memory metrics.
+
+### running the Dashboard
+```bash
+cd web
+bun install
+bun start
+```
+Navigate to the logged `http://localhost:PORT`.
 
 ---
 
@@ -30,77 +53,41 @@ A modular PowerShell utility for managing WSL instances. It facilitates cloning 
 
 Syntax:
 ```powershell
-.\wsl_tools.ps1 <instance_name> <command> [<base_distro_or_path>]
+.\wsl_tools.ps1 <command> [<instance_name>] [<base_distro_or_path>]
 ```
 
 | Command | Description |
 | :--- | :--- |
-| `fetch` | Downloads Alpine Linux minirootfs to `~/WSL/_bases/`. |
-| `new` | Imports a new instance from a tarball or clones an existing distro. |
-| `daemon` | Starts a background job executing `sleep infinity` to keep the instance active. |
-| `monitor` | Reports real-time CPU, Memory, Disk, and Network usage from within the instance. |
-| `stop` | Terminates the instance (`wsl --terminate`) and removes the background job. |
-| `list` | Lists all registered WSL instances (`wsl -l -v`). |
-| `list-json` | Returns a JSON array of instances with status details. |
-| `monitor-json` | Returns a JSON object of resource usage for tool consumption. |
+| `fetch` | Downloads Alpine minirootfs for fast initialization. |
+| `new` | Creates a new instance. Defaults to Alpine for speed. |
+| `daemon` | Keeps the instance alive via background spawn. |
+| `stop` | Gracefully terminates the instance and cleanup. |
+| `monitor` | Linux metrics: `uptime`, `free`, `df`, `ip link`. |
+| `dashboard` | Starts the Bun web server for the visual dashboard. |
+| `list` | Lists all registered WSL instances. |
+| `list-json` | JSON output for dashboard integration. |
 
-### Resource Monitoring (`monitor`)
-Executes standard Linux tools inside the instance to report usage:
-- **Uptime**: `uptime`
-- **Memory**: `free -m`
-- **Disk**: `df -h /`
-- **Network**: `ip -s link`
+---
 
-Example output:
-```text
-[MEMORY]
-              total        used        free      shared  buff/cache   available
-Mem:          32056         412       31000           1         643       31278
+## Automated Verification
+
+### Dashboard Lifecycle Test
+Verifies the full loop from creation to provisioning:
+```bash
+cd web
+bun test
 ```
+**Test Flow**: Creation -> Detection -> Start -> `apk add git bash` -> `git clone dialtone`.
 
-### Safety & cleanup
-- **Overwrite Protection**: Checks for existing instance names and valid filesystem paths before creation.
-- **Test Isolation**: Test suites use randomized IDs (`wsl-tools-test-XXXX`) to avoid conflicts with existing environments.
-
----
-
-## Web Dashboard
-
-A unified, real-time interface for managing your WSL fleet.
-
-### Features
-- **Real-time Monitoring**: Live updates of CPU, RAM, Disk, and Network usage via WebSockets.
-- **Modern UI**: Dark-themed, responsive interface powered by standard web technologies.
-- **Bun Backend**: fast, efficient server handling process spawning and WebSocket broadcasting.
-
-### Quick Start
-1.  **Install Dependencies**:
-    ```bash
-    cd web
-    bun install
-    ```
-2.  **Run Server**:
-    ```bash
-    bun run server.ts
-    ```
-3.  **Open Dashboard**:
-    Navigate to `http://localhost:3000` (or the port logged in the terminal).
+### Complex Integration
+```powershell
+.\test_complex_setup.ps1
+```
+Mirrors the dashboard provisioning logic in pure PowerShell.
 
 ---
-
-## Testing
-
-- **Unit Tests**: `.\test_wsl_tools.ps1`
-  - Verifies overwrite protection mechanisms.
-  - Verifies daemon job creation and cleanup.
-- **Integration**: `.\test_complex_setup.ps1`
-  - Performs a full lifecycle test: create -> provision (user/git) -> monitor -> cleanup.
-  - Uses a randomized instance name for safety.
-- **Web Verification**: `web/test_dashboard.ts`
-  - Uses **Puppeteer** to verify the dashboard.
-  - Checks page title, screenshots the UI, and validates error interception.
-  - **Run**: `cd web; bun run test_dashboard.ts`
 
 ## Requirements
 - WSL 2
 - PowerShell 5.1+
+- Bun (for Dashboard & Tests)
