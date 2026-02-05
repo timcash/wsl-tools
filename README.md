@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="wsl_octopus.png" width="300" alt="WSL Tools Octopus">
+  <img src="wsl_invader.svg" width="300" alt="WSL Tools Invader">
 </div>
 
 # WSL Tools

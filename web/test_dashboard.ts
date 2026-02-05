@@ -68,7 +68,7 @@ function logToFile(message: string) {
         // 4. Verify Image Loads
         logToFile('🖼️ Verifying Image Load...');
         const imageLoaded = await page.evaluate(() => {
-            const img = document.querySelector('img[src="/wsl_octopus.png"]') as HTMLImageElement;
+            const img = document.querySelector('img[src="/wsl_invader.svg"]') as HTMLImageElement;
             if (!img) return { found: false, src: null, loaded: false };
             return { found: true, src: img.src, loaded: img.complete && img.naturalWidth > 0 };
         });

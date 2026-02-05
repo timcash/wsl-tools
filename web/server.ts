@@ -5,7 +5,7 @@ const PS_SCRIPT = "..\\wsl_tools.ps1";
 import { join } from "path";
 import { existsSync } from "fs";
 
-const IMAGE_PATH = join(import.meta.dir, "wsl_octopus.png");
+const IMAGE_PATH = join(import.meta.dir, "wsl_invader.svg");
 console.log(`[DEBUG] Image path: ${IMAGE_PATH}, Exists: ${existsSync(IMAGE_PATH)}`);
 
 // ... helper functions getWSLList, getWSLMonitor ...
@@ -40,7 +40,7 @@ const server = Bun.serve({
     port: port,
     routes: {
         "/": index,
-        "/wsl_octopus.png": Bun.file(IMAGE_PATH),
+        "/wsl_invader.svg": Bun.file(IMAGE_PATH),
     },
     fetch(req, server) {
         if (server.upgrade(req)) {
