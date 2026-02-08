@@ -7,18 +7,14 @@ param (
     [string]$InstanceName,
 
     [Parameter(Mandatory = $false, Position = 2)]
-    [string]$BaseDistro = "Ubuntu"
+    [string]$BaseDistro = "Ubuntu",
+
+    [Parameter(Mandatory = $false)]
+    [int]$Port = 3000
 )
 
 # Force UTF-8 for clean output to the dashboard
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-# --- Validation for Instance-Specific Commands ---
-$InstanceSpecificCommands = @("new", "daemon", "stop", "monitor", "monitor-json", "ssh", "delete", "unregister")
-if ($InstanceSpecificCommands -contains $Command -and -not $InstanceName) {
-    Write-Error "Command '$Command' requires an instance name. Usage: .\wsl_tools.ps1 $Command <instance_name>"
-    exit 1
-}
 
 # --- Configuration ---
 $WSL_DIR = Join-Path $HOME "WSL"
@@ -51,7 +47,7 @@ function Write-WslLog {
 function Invoke-WslCommand {
     param($ArgsList)
     $cmdString = "wsl.exe " + ($ArgsList -join " ")
-    Write-WslLog "Executing: $cmdString" "DEBUG" -Quiet $true # Suppress noise
+    Write-WslLog "Executing: $cmdString" "DEBUG" -Quiet $true
     $output = & wsl.exe @ArgsList
     return $output
 }
@@ -65,7 +61,6 @@ function Test-WSLInstanceExists {
     param($Name, $Quiet = $false)
     if (-not $Quiet) { Write-WslLog "Checking existence for '$Name'..." }
     $lines = wsl.exe -l --quiet
-    # wsl -l --quiet output is often UTF-16LE with null bytes.
     foreach ($line in $lines) {
         $clean = $line -replace "\x00", "" -replace "^\s+", "" -replace "\s+$", ""
         if ($clean -eq $Name) { 
@@ -123,7 +118,6 @@ function Measure-WSLInstance {
         return
     }
 
-    # Internal helper to get metrics
     $MemVal = "Unknown"
     $DiskVal = "Unknown"
 
@@ -176,12 +170,9 @@ function Get-WSLInstances {
     param($AsJson = $false)
     Write-WslLog "Listing instances (JSON: $AsJson)..." -Quiet $AsJson
     if ($AsJson) {
-        # Fix encoding: wsl output is UTF-16LE, PowerShell might read it with nulls if piped
-        # We explicitly rely on string replacement to clean up the null bytes commonly seen
         $lines = wsl.exe -l -v
         
         $parsed = $lines | Select-Object -Skip 1 | Where-Object { $_ -match "\w" } | ForEach-Object {
-            # Clean up null bytes and whitespace
             $line = $_ -replace "\x00", "" -replace "^\s*\*\s*", "" -replace "^\s+", ""
             $parts = $line -split "\s+"
             if ($parts.Count -ge 3) {
@@ -193,7 +184,6 @@ function Get-WSLInstances {
             }
         }
         $json = $parsed | ConvertTo-Json -Compress
-        Write-WslLog "Instances found: $($parsed.Count)" "DEBUG"
         return $json
     }
     else {
@@ -207,7 +197,6 @@ function New-WSLInstance {
     Write-WslLog "Request: New instance '$Name' from '$Base'"
     Write-Host "Creating new WSL instance '$Name' from '$Base'..." -ForegroundColor Cyan
     
-    # Auto-resolve 'alpine' shortcut to downloaded rootfs
     if ($Base -eq "alpine" -and -not (Test-Path $Base)) {
         $PossibleAlpine = Join-Path $BASES_DIR "alpine.tar.gz"
         if (Test-Path $PossibleAlpine) {
@@ -216,7 +205,6 @@ function New-WSLInstance {
         }
     }
     
-    # 1. Validation
     if (Test-WSLInstanceExists -Name $Name) {
         Write-WslLog "Aborting: '$Name' already exists." "ERROR"
         Write-Error "WSL instance with name '$Name' already exists. Aborting."
@@ -230,9 +218,7 @@ function New-WSLInstance {
         return
     }
 
-    # 2. Deployment
     if (Test-Path $Base) {
-        # Import from local tarball
         try {
             Write-WslLog "Action: Importing $Name from $Base"
             Import-WSLDistro -Name $Name -InstallPath $InstallPath -SourcePath $Base
@@ -246,7 +232,6 @@ function New-WSLInstance {
         }
     }
     else {
-        # Clone existing distro
         $TempTar = [System.IO.Path]::GetTempFileName() + ".tar"
         try {
             Write-WslLog "Action: Exporting $Base to temp"
@@ -259,7 +244,6 @@ function New-WSLInstance {
         catch {
             Write-WslLog "Failure: $_" "ERROR"
             Write-Error "Failed to create WSL instance '$Name' from '$Base': $_"
-            # Cleanup on failure if the directory was created
             if (Test-Path $InstallPath) { Remove-Item $InstallPath -Recurse -Force -ErrorAction SilentlyContinue }
             exit 1
         }
@@ -275,7 +259,6 @@ function Start-WSLDaemon {
     Write-WslLog "Request: Start daemon for '$Name'"
     Write-Host "Starting daemon for WSL instance '$Name'..." -ForegroundColor Cyan
     
-    # Check if already running
     if (Test-WSLInstanceExists -Name $Name) {
         $statusLine = wsl.exe -l -v | Select-String -Pattern "^\s*\*?\s*$Name\b"
         if ($statusLine -match "Running") {
@@ -285,11 +268,8 @@ function Start-WSLDaemon {
         }
     }
 
-    # Start using Start-Process to ensure it's detached and persistent
     Write-WslLog "Action: Detaching background process (wsl -d $Name -- sleep infinity)"
     Start-Process -FilePath "wsl.exe" -ArgumentList "-d", $Name, "--", "sleep", "infinity" -NoNewWindow
-    
-    # Give it a moment to actually show as 'Running' in wsl -l -v
     Start-Sleep -Seconds 2
     
     $statusLine = wsl.exe -l -v | Select-String -Pattern "^\s*\*?\s*$Name\b"
@@ -311,16 +291,19 @@ function Stop-WSLInstance {
     wsl.exe --terminate $Name
     
     # 2. Find and kill any detached background processes (Start-Process wsl ...)
-    # We look for wsl.exe processes that have the instance name in their command line
     $procs = Get-CimInstance Win32_Process -Filter "Name = 'wsl.exe'" | Where-Object { $_.CommandLine -match "-d\s+$Name\b" }
     foreach ($p in $procs) {
         Write-WslLog "Action: Killing background wsl process $($p.ProcessId) for $Name" "DEBUG"
         Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
     }
 
-    # Give it a moment to fully unregister from the running list
-    Start-Sleep -Seconds 2
-    
+    # 3. If it is a TDD instance, be even more aggressive to prevent auto-restart loops
+    if ($Name.StartsWith("TDD-")) {
+        Start-Sleep -Seconds 1
+        wsl.exe --terminate $Name
+    }
+
+    Start-Sleep -Seconds 3
     Write-Host "Instance '$Name' stopped and background jobs cleared." -ForegroundColor Green
     Write-WslLog "Status: Instance '$Name' stopped."
 }
@@ -339,32 +322,21 @@ switch ($Command) {
         $WebDir = Join-Path $PSScriptRoot "src"
         Write-Host "--- Dashboard Diagnostics (v2) ---" -ForegroundColor Gray
         
-        # 1. Check for running Bun processes
-        $BunProcs = Get-Process -Name bun -ErrorAction SilentlyContinue
-        if ($BunProcs) {
-            Write-Host "[INFO] Detected $($BunProcs.Count) running Bun process(es):" -ForegroundColor Yellow
-            $BunProcs | Select-Object Id, ProcessName, @{N = 'Path'; E = { $_.MainModule.FileName } } | Format-Table -AutoSize
-        }
-        else {
-            Write-Host "[OK] No conflicting Bun processes found." -ForegroundColor Green
-        }
-
-        # 2. Check for port conflicts (Defaulting to check 3000 as common dashboard port)
-        # Note: server.ts uses port 0 (dynamic), but user might be concerned about specific ports if they customize
-        $Conflict = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }
+        $Conflict = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue | Where-Object { $_.State -eq 'Listen' }
         if ($Conflict) {
-            Write-Warning "Port 3000 is already in use by PID $($Conflict.OwningProcess)."
+            Write-Warning "Port $Port is already in use by PID $($Conflict.OwningProcess)."
         }
 
-        Write-Host "`nStarting WSL Dashboard from $WebDir..." -ForegroundColor Cyan
+        Write-Host "`nStarting WSL Dashboard on port $Port from $WebDir..." -ForegroundColor Cyan
         Set-Location $WebDir
         
-        # Start bun in the background so we can monitor the port file
+        $env:PORT = $Port
         $job = Start-Job -ScriptBlock {
-            param($dir)
+            param($dir, $p)
             Set-Location $dir
+            $env:PORT = $p
             bun run dev
-        } -ArgumentList $WebDir
+        } -ArgumentList $WebDir, $Port
 
         Write-Host "Waiting for dashboard to initialize..." -ForegroundColor Gray
         $portFile = Join-Path $WebDir ".port"
@@ -376,11 +348,9 @@ switch ($Command) {
         }
 
         if (Test-Path $portFile) {
-            $port = Get-Content $portFile
-            Write-Host "`n🚀 Dashboard is LIVE: http://localhost:$port" -ForegroundColor Green
+            $actualPort = Get-Content $portFile
+            Write-Host "`n🚀 Dashboard is LIVE: http://localhost:$actualPort" -ForegroundColor Green
             Write-Host "Press Ctrl+C to stop (terminates background job)." -ForegroundColor Gray
-            
-            # Follow the job output
             Receive-Job -Job $job -Wait
         } else {
             Write-Error "Dashboard failed to start or write .port file within 15 seconds."

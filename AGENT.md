@@ -5,34 +5,51 @@ This project follows a strict **TDD (Test-Driven Development)** and **Log-Focuse
 ## 🧪 Testing Infrastructure
 
 ### 1. `src/test.ts` (The Orchestrator)
-The primary test suite is built on **Puppeteer** and **Bun**. It manages the full lifecycle:
-- **Phase 1: Backend Verification**: Independently verifies `wsl_tools.ps1` commands (`new`, `delete`, `list-json`) to ensure the foundation is solid before involving the network/UI layers.
+The primary test suite manages the full lifecycle:
+- **Isolation**: The test suite uses a dedicated port (default 3002) and only manages instances prefixed with `TDD-`. This allows you to run the development dashboard while simultaneously running tests.
+- **Phase 1: Backend Verification**: Independently verifies `wsl_tools.ps1` commands (`new`, `delete`, `list-json`) to ensure the foundation is solid.
 - **Phase 2: Unified Trace**: Launches the dashboard and browser, performing an end-to-end trace from UI action -> WebSocket -> PowerShell -> File Log -> UI Telemetry.
 
-### 2. Unified Logging
-All logs are consolidated into `src/test.log` and the `README.md` report:
-- **Server Logs**: Prefixed with `[SRV-OUT]` or `[SRV-ERR]`.
-- **PowerShell Logs**: Captured from `powershell.log` and echoed with `[PS-LOG]`.
-- **Browser Logs**: Intercepted from the console and prefixed with `[BRW-CONSOLE]`.
+### 2. Unified Logging & Sanitization
+All logs are consolidated into `src/test.log` and the `README.md` report.
+- **Sanitization**: All output is forced to UTF-8 and sanitized to strip null bytes (`\0`) and non-printable characters that cause "strange squares" in Windows stdout.
+- **Flow**: PowerShell (stderr) -> Bun Server (stdout) -> Puppeteer Console -> Unified Test Log.
 
-## 🛠️ Troubleshooting & Debugging
+## 🛠️ Repository Workflow
 
-If a test fails, follow this triage order:
+### 🖥️ Running the Dashboard
+The dashboard uses Bun in watch mode for live-reload of `app.ts` and `style.css`.
+```powershell
+# Default port 3000
+.\wsl_tools.ps1 dashboard
 
-1.  **Check `src/test.log`**: This is the unified stream. Look for the "Unified Trace" to see exactly where the command died (e.g., did the server receive the WS message?).
-2.  **JSON Parse Errors**: If you see `Unexpected end of JSON input`, it usually means a PowerShell command output log noise to `stdout`. 
-    - **Fix**: Ensure all logs in `wsl_tools.ps1` use `Write-WslLog` (which only writes to file) and avoid `Write-Output` for anything other than raw data.
-3.  **File Locking (`powershell.log`)**: The log file may occasionally be locked by PowerShell while the Bun server tries to tail it. 
-    - **Resolution**: The server uses `Bun.file().slice()` for non-locking reads, and the PowerShell script is configured to silently continue on log-write failures.
-4.  **"Unknown" Stats**: Freshly created Alpine instances may report `Unknown` for Memory/Disk for the first few seconds while the WSL VM initializes. The test suite is now configured to accept these as valid telemetry heartbeats.
-5.  **WSL Daemon Persistence**: If an instance stays `Stopped` despite a `start` command, verify the `Start-WSLDaemon` function in `wsl_tools.ps1`. It uses `Start-Process` to detach the `sleep infinity` process from the caller's session.
+# Custom port
+.\wsl_tools.ps1 dashboard -Port 8080
+```
 
-## 🚀 How to Run Tests
+### 📋 High-Density UI
+The UI is a spreadsheet-style table designed for maximum information density:
+- **Instance**: Name of the WSL distribution.
+- **Status**: Real-time state (Running, Stopped, etc.).
+- **Memory/Storage**: Live telemetry.
+- **Actions**: Start, Stop, Delete, and **Copy Command** (copies `wsl -d <name>` to clipboard).
 
-1.  **Execute Unified Suite**:
-    ```bash
-    cd src
-    bun run test.ts
-    ```
-2.  **Review Results**:
-    Check the bottom of `README.md` for the full **Unified Execution Trace**. This report is overwritten on every run to provide immediate feedback on the latest build's health.
+### 🧪 Working with Tests
+Tests are designed to be non-destructive to your existing WSL instances.
+- **Prefixing**: Only instances named `TDD-*` are touched by the automated suite.
+- **Port Management**: The test suite will automatically attempt to free its target port (3002) before starting the internal test server.
+- **Aggressive Stop**: For `TDD-` instances, the `stop` command is more aggressive to prevent auto-restart loops during verification.
+
+## 🛠️ Troubleshooting
+
+1.  **Check `src/test.log`**: This is the unified stream.
+2.  **JSON Parse Errors**: Usually caused by PowerShell logging to `stdout`. Use `Write-WslLog` in the script to ensure logs stay in `stderr` or the log file.
+3.  **Process Hanging**: If a test hangs, check if a background `wsl.exe` process is stuck. The test suite attempts to kill these, but manual intervention (`wsl --shutdown`) may be needed in extreme cases.
+
+## 🚀 Next Steps & Roadmap
+
+- [ ] **Terminal Integration**: Add a button to spawn a real Windows Terminal window directly into the instance.
+- [ ] **Bulk Actions**: Implement "Start All" and "Stop All" for managed fleets.
+- [ ] **Resource Graphs**: Transition from text-based telemetry to small sparkline graphs for CPU/Memory history.
+- [ ] **Distro Templates**: Support custom rootfs templates beyond the default Alpine mini-rootfs.
+- [ ] **WSL Settings**: UI for modifying `.wslconfig` and instance-specific flags (like memory limits).

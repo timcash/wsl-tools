@@ -124,7 +124,7 @@ async function streamPsOutput(proc: any) {
 const activeActions = new Set(); // Track instances undergoing manual actions
 
 const server = Bun.serve({
-    port: 3001,
+    port: parseInt(process.env.PORT || "3000"),
     async fetch(req, server) {
         if (server.upgrade(req)) return;
 

@@ -41,6 +41,9 @@ function createInstanceCard(inst: any) {
         </td>
         <td style="padding: 12px 24px; text-align: right;">
             <div style="display: flex; gap: 4px; justify-content: flex-end; align-items: center;">
+                <button class="btn btn-ghost btn-sm" aria-label="Copy ${inst.Name}" title="Copy Command" onclick="window.app.copySsh('${inst.Name}')">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
                 <button class="btn btn-ghost btn-sm" aria-label="Start ${inst.Name}" onclick="window.app.start('${inst.Name}')" ${isRunning || isTransitioning ? 'disabled' : ''}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 </button>

@@ -14,7 +14,9 @@ async function runTest() {
     const testLog = join(process.cwd(), "test.log");
     const portFile = join(process.cwd(), ".port");
     const PS_SCRIPT = join(process.cwd(), "..", "wsl_tools.ps1");
-    const TEST_INST = "TDD-Unified-Final";
+    const TEST_PREFIX = "TDD-";
+    const TEST_INST = `${TEST_PREFIX}Unified-Final`;
+    const TEST_PORT = 3002; // Use a different port than default dev server
     const screenshotsDir = join(process.cwd(), "screenshots");
     
     if (!existsSync(screenshotsDir)) mkdirSync(screenshotsDir);
@@ -62,6 +64,27 @@ async function runTest() {
         return { code, stdout: stdout.trim(), stderr: stderr.trim() };
     };
 
+    const freePort = async (port: number) => {
+        log(`[SETUP] Ensuring port ${port} is free...`);
+        const script = `Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`;
+        const proc = spawn(["powershell", "-Command", script]);
+        await proc.exited;
+    };
+
+    const cleanupTddInstances = async () => {
+        log("[CLEANUP] Removing any lingering TDD- instances...");
+        const list = await runWslTool("list-json");
+        try {
+            const instances = JSON.parse(list.stdout);
+            for (const inst of instances) {
+                if (inst.Name.startsWith(TEST_PREFIX)) {
+                    log(`[CLEANUP] Deleting ${inst.Name}`);
+                    await runWslTool("delete", [inst.Name]);
+                }
+            }
+        } catch (e) {}
+    };
+
     writeFileSync(testLog, `--- STRUCTURED TDD SESSION: ${new Date().toISOString()} ---\n`, "utf8");
     let highSeverityError = false;
     let browser: puppeteer.Browser | null = null;
@@ -69,14 +92,22 @@ async function runTest() {
 
     try {
         log("=== PHASE 1: BACKEND PREP ===");
-        await runWslTool("delete", [TEST_INST]);
+        await freePort(TEST_PORT);
+        await cleanupTddInstances();
+        
         const createResult = await runWslTool("new", [TEST_INST, "alpine"]);
         if (createResult.code !== 0) throw new Error("Backend 'new' failed");
         await addStep("1. Backend Infrastructure Ready");
 
         log("=== PHASE 2: SERVER START ===");
         if (existsSync(portFile)) unlinkSync(portFile);
-        serverProc = spawn(["bun", "server.ts"], { stdout: "pipe", stderr: "pipe" });
+        
+        // Start server on TEST_PORT
+        serverProc = spawn(["bun", "server.ts"], { 
+            stdout: "pipe", 
+            stderr: "pipe",
+            env: { ...process.env, PORT: TEST_PORT.toString() }
+        });
 
         const pipeToLog = async (stream: ReadableStream, prefix: string) => {
             const reader = stream.getReader();
@@ -95,8 +126,7 @@ async function runTest() {
         const portTimeout = Date.now() + 10000;
         while (!existsSync(portFile) && Date.now() < portTimeout) await new Promise(r => setTimeout(r, 500));
         if (!existsSync(portFile)) throw new Error("Server port file timeout");
-        const port = readFileSync(portFile, 'utf8').trim();
-
+        
         browser = await puppeteer.launch({ headless: true });
         const page = await browser.newPage();
         
@@ -111,7 +141,7 @@ async function runTest() {
         });
         page.on('dialog', async d => { log(`[BRW-DIALOG] ${d.message()}`); await d.accept(); });
 
-        await page.goto(`http://localhost:${port}`, { waitUntil: 'networkidle0' });
+        await page.goto(`http://localhost:${TEST_PORT}`, { waitUntil: 'networkidle0' });
         await addStep("2. Dashboard Initial Load", page);
 
         log("=== PHASE 3: START & TELEMETRY ===");
@@ -169,21 +199,13 @@ async function runTest() {
         if (serverProc) serverProc.kill();
 
         log("\n=== FINAL CLEANUP ===");
-        try {
-            const proc = spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "delete", TEST_INST]);
-            await proc.exited;
-            log(`[PASS] Cleaned up ${TEST_INST}`);
-        } catch (e) {
-            log(`[WARN] Cleanup failed for ${TEST_INST}: ${e}`);
-        }
+        await cleanupTddInstances();
 
         try {
             const readmePath = join(process.cwd(), "..", "README.md");
             let content = readFileSync(readmePath, 'utf8');
             const marker = '# Test Result';
-            
             let report = `${marker}\n\n**Run:** ${new Date().toLocaleString()} | **Status:** ${highSeverityError ? '[FAIL] FAILED' : '[PASS] PASSED'}\n\n`;
-            
             for (const step of steps) {
                 report += `### ${step.status} ${step.title}\n\n`;
                 if (step.screenshot) {
@@ -193,7 +215,6 @@ async function runTest() {
                     report += "```text\n" + step.logs.join('\n') + "\n```\n\n";
                 }
             }
-
             const idx = content.indexOf(marker);
             if (idx !== -1) content = content.substring(0, idx);
             writeFileSync(readmePath, content.trimEnd() + '\n\n' + report);
