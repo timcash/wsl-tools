@@ -64,20 +64,27 @@ bun run test.ts
 
 # Test Result
 
-**Run:** 2/8/2026, 1:16:18 PM | **Status:** 🔴 FAILED
-
-> ⚠️ **ERROR SUMMARY**: FAILED: Start/Stats timeout
+**Run:** 2/8/2026, 1:36:44 PM | **Status:** 🟢 PASSED
 
 ### ✅ 1. Backend Infrastructure Ready
 
 ```text
-[13:15:10] === PHASE 1: BACKEND PREP ===
-[13:15:10] [SETUP] Ensuring port 3002 is free...
-[13:15:11] [CLEANUP] Removing any lingering TDD- instances...
-[13:15:11] [EXEC] wsl_tools.ps1 list-json 
-[13:15:11] [PS-STDOUT] [{"Name":"podman-machine-default","State":"Stopped","Version":"2"},{"Name":"test","State":"Running","Version":"2"},{"Name":"Ubuntu-24.04","State":"Stopped","Version":"2"}]
-[13:15:11] [EXEC] wsl_tools.ps1 new TDD-Unified-Final alpine
-[13:15:12] [PS-STDOUT] Creating new WSL instance 'TDD-Unified-Final' from 'alpine'...
+[13:36:28] === PHASE 1: BACKEND PREP ===
+[13:36:28] [SETUP] Ensuring port 3002 is free...
+[13:36:29] [CLEANUP] Removing any lingering TDD- instances...
+[13:36:29] [EXEC] wsl_tools.ps1 list-json 
+[13:36:29] [PS-STDOUT] [{"Name":"podman-machine-default","State":"Stopped","Version":"2","Persisted":false},{"Name":"Ubuntu-24.04","State":"Running","Version":"2","Persisted":false},{"Name":"TDD-Unified-Final","State":"Running","Version":"2","Persisted":false}]
+[13:36:29] [CLEANUP] Deleting TDD-Unified-Final
+[13:36:29] [EXEC] wsl_tools.ps1 delete TDD-Unified-Final
+[13:36:33] [PS-STDOUT] Stopping WSL instance 'TDD-Unified-Final'...
+The operation completed successfully. 
+The operation completed successfully. 
+Instance 'TDD-Unified-Final' stopped and background jobs cleared.
+Unregistering WSL instance 'TDD-Unified-Final'...
+The operation completed successfully. 
+
+[13:36:33] [EXEC] wsl_tools.ps1 new TDD-Unified-Final alpine
+[13:36:34] [PS-STDOUT] Creating new WSL instance 'TDD-Unified-Final' from 'alpine'...
 Importing TDD-Unified-Final from C:\Users\timca\WSL\_bases\alpine.tar.gz into C:\Users\timca\WSL\TDD-Unified-Final...
 The operation completed successfully. 
 Instance 'TDD-Unified-Final' created successfully from C:\Users\timca\WSL\_bases\alpine.tar.gz.
@@ -88,64 +95,55 @@ Instance 'TDD-Unified-Final' created successfully from C:\Users\timca\WSL\_bases
 ![2. Dashboard Initial Load](src/screenshots/step_1.png)
 
 ```text
-[13:15:12] === PHASE 2: SERVER START ===
-[13:15:12] [SRV-OUT] [BUILD] Transpiling C:\Users\timca\code3\wsl-tools\src\app.ts -> C:\Users\timca\code3\wsl-tools\src\dist
-[13:15:12] [SRV-OUT] [BUILD] Success!
-[13:15:12] [SRV-OUT] [TAIL] Starting log tail on: C:\Users\timca\code3\wsl-tools\src\powershell.log
-[13:15:12] [SRV-OUT] [V2] Dashboard active at http://localhost:3002
-[13:15:13] [SRV-OUT] [HTTP] GET / (rel: )
-[13:15:13] [SRV-OUT] [HTTP] GET /style.css (rel: style.css)
-[13:15:13] [SRV-OUT] [HTTP] GET /app.js (rel: app.js)
-[13:15:13] [SRV-OUT] [HTTP] GET /wsl_cpu_network.png (rel: wsl_cpu_network.png)
-[13:15:13] [BRW-CONSOLE] [WS] Attempting connection...
-[13:15:13] [SRV-OUT] [WS] Client connected
-[13:15:13] [BRW-CONSOLE] [WS] Connected to backend
-[13:15:13] [SRV-OUT] [HTTP] GET /favicon.ico (rel: favicon.ico)
-[13:15:13] [BRW-CONSOLE] Failed to load resource: the server responded with a status of 404 (Not Found)
-[13:15:13] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
+[13:36:34] === PHASE 2: SERVER START ===
+[13:36:34] [SRV-OUT] [BUILD] Transpiling C:\Users\timca\code3\wsl-tools\src\app.ts -> C:\Users\timca\code3\wsl-tools\src\dist
+[13:36:34] [SRV-OUT] [BUILD] Success!
+[13:36:34] [SRV-OUT] [TAIL] Starting log tail on: C:\Users\timca\code3\wsl-tools\src\powershell.log
+[13:36:34] [SRV-OUT] [V2] Dashboard active at http://localhost:3002
+[13:36:35] [SRV-OUT] [HTTP] GET / (rel: )
+[13:36:35] [SRV-OUT] [HTTP] GET /style.css (rel: style.css)
+[13:36:35] [SRV-OUT] [HTTP] GET /app.js (rel: app.js)
+[13:36:35] [SRV-OUT] [HTTP] GET /wsl_cpu_network.png (rel: wsl_cpu_network.png)
+[13:36:35] [BRW-CONSOLE] [WS] Attempting connection...
+[13:36:35] [SRV-OUT] [WS] Client connected
+[13:36:35] [BRW-CONSOLE] [WS] Connected to backend
+[13:36:35] [SRV-OUT] [HTTP] GET /favicon.ico (rel: favicon.ico)
+[13:36:35] [BRW-CONSOLE] Failed to load resource: the server responded with a status of 404 (Not Found)
 ```
 
-### ❌ FAILED: Start/Stats timeout
+### ✅ 7. OS Persistence Verified (Windows Task Scheduler)
+
+![7. OS Persistence Verified (Windows Task Scheduler)](src/screenshots/step_2.png)
 
 ```text
-[13:15:13] === PHASE 3: START & TELEMETRY ===
-[13:15:13] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Starting)
-[13:15:13] [SRV-OUT] [WS] Received: {"type":"start","name":"TDD-Unified-Final"}
-[13:15:13] [SRV-OUT] [WS] Parsed Action: start on TDD-Unified-Final
-[13:15:13] [SRV-OUT] [SERVER] Executing: daemon TDD-Unified-Final
-[13:15:13] [SRV-OUT] [PS-OUT] Starting self-healing daemon for WSL instance 'TDD-Unified-Final'...
-[13:15:14] [SRV-OUT] [PS-OUT] Id     Name            PSJobTypeName   State         HasMoreData     Location             Command
-[13:15:14] [SRV-OUT] [PS-OUT] --     ----            -------------   -----         -----------     --------             -------
-[13:15:14] [SRV-OUT] [PS-OUT] 1      WSL_Daemon_T... BackgroundJob   Running       True            localhost            ...
-[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:13] [INFO] Command Entry: daemon TDD-Unified-Final
-[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:13] [INFO] Request: Sta
-[13:15:14] [SRV-OUT] rt daemon (self-healing) for 'TDD-Unified-Final'
-[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:14] [INFO] Action: Detached self-healing job (WSL_Daemon_TDD-Unified-Final)
-[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:14] [INFO] [DAEMON] Daemon loop started for TDD-Unified-Final
-[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:14] [INFO] [DAEMON] Daemon starting/ensuring TDD-Unified-Final...
-[13:15:14] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: podman-machine-default
-[13:15:14] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
-[13:15:14] [BRW-CONSOLE] [UI_ONLINE] Instance online: TDD-Unified-Final
-[13:15:14] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: Ubuntu-24.04
-[13:15:15] [SRV-OUT] [STATE] podman-machine-default: Unknown -> Stopped
-[13:15:15] [SRV-OUT] [STATE] test: Unknown -> Running
-[13:15:15] [SRV-OUT] [STATE] Ubuntu-24.04: Unknown -> Stopped
-[13:15:15] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 534MB / 15847MB
-[13:15:15] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Disk: 8.2M / 1006.9G
-[13:15:16] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:16] [WARN] Warning: Daemon job started but instance 'TDD-Unified-Final' still shows as [2]
-[13:15:21] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 538MB / 15847MB
-[13:15:24] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 536MB / 15847MB
-[13:15:30] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: TDD-Unified-Final
-[13:15:30] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 500MB / 15847MB
-[13:15:33] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 501MB / 15847MB
-[13:15:36] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 502MB / 15847MB
-[13:15:42] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 503MB / 15847MB
-[13:15:49] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 504MB / 15847MB
-[13:15:52] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 503MB / 15847MB
-[13:15:55] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 504MB / 15847MB
-[13:16:04] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 505MB / 15847MB
-[13:16:07] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 503MB / 15847MB
-[13:16:14] 
-[FAIL] FAILURE: Start/Stats timeout
+[13:36:36] === PHASE 7: OS PERSISTENCE (TASK SCHEDULER) ===
+[13:36:36] [7.1] Registering persistence for reboot...
+[13:36:36] [EXEC] wsl_tools.ps1 persist TDD-Unified-Final
+[13:36:36] [SRV-OUT] [PS-LOG] [2026-02-08 13:36:36] [INFO] Command Entry: persist TDD-Unified-Final
+[13:36:36] [WS_RECV] {"type":"ps-log","data":"[2026-02-08 13:36:36] [INFO] Command Entry: persist TDD-Unified-Final"}
+[13:36:36] [PS-STDOUT] Registering Windows Task 'WSL_Persist_TDD-Unified-Final' for reboot persistence...
+
+TaskPath                                       TaskName                          State     
+--------                                       --------                          -----     
+\                                              WSL_Persist_TDD-Unified-Final     Ready     
+Task registered. TDD-Unified-Final will now start automatically when you log in.
+[13:36:36] [7.2] Verifying task existence via Get-ScheduledTask...
+[13:36:37] [7.3] Windows Scheduled Task verified. It will survive reboots.
+[13:36:37] [7.4] Testing unpersist cleanup...
+[13:36:37] [EXEC] wsl_tools.ps1 unpersist TDD-Unified-Final
+[13:36:38] [SRV-OUT] [STATE] podman-machine-default: Unknown -> Stopped
+[13:36:38] [SRV-OUT] [STATE] TDD-Unified-Final: Unknown -> Stopped
+[13:36:38] [SRV-OUT] [STATE] Ubuntu-24.04: Unknown -> Running
+[13:36:38] [WS_RECV] {"type":"list","data":[{"Name":"podman-machine-default","State":"Stopped","Version":"2","Persisted":false},{"Name":"TDD-Unified-Final","State":"Stopped","Version":"2","Persisted":true},{"Name":"Ubuntu-24.04","State":"Running","Version":"2","Persisted":false}]}
+[13:36:38] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: podman-machine-default
+[13:36:38] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: TDD-Unified-Final
+[13:36:38] [BRW-CONSOLE] [UI_ONLINE] Instance online: Ubuntu-24.04
+[13:36:38] [SRV-OUT] [PS-LOG] [2026-02-08 13:36:37] [INFO] Command Entry: unpersist TDD-Unified-Final
+[13:36:38] [WS_RECV] {"type":"ps-log","data":"[2026-02-08 13:36:37] [INFO] Command Entry: unpersist TDD-Unified-Final"}
+[13:36:38] [PS-STDOUT] Removing Windows Task 'WSL_Persist_TDD-Unified-Final'...
+[13:36:38] [WS_RECV] {"type":"stats","data":{"InstanceName":"Ubuntu-24.04","Timestamp":"2026-02-08 13:36:38","Memory":"808MB / 15847MB","Disk":"40G / 1007G"}}
+[13:36:38] [BRW-CONSOLE] [UI_UPDATE] Stats updated: Ubuntu-24.04 Mem: 808MB / 15847MB
+[13:36:38] [BRW-CONSOLE] [UI_UPDATE] Stats updated: Ubuntu-24.04 Disk: 40G / 1007G
+[13:36:39] [7.5] OS Persistence cleanup verified.
 ```
 

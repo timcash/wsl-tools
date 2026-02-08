@@ -139,6 +139,11 @@ body {
     color: hsl(var(--fg-main));
 }
 
+.btn-ghost.active {
+    background: hsl(var(--primary) / 0.1);
+    border-color: hsl(var(--primary) / 0.3);
+}
+
 .badge {
     padding: 4px 10px;
     border-radius: 99px;

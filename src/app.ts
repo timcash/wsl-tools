@@ -79,6 +79,7 @@ function connect() {
             console.warn("[WS] Received empty message");
             return;
         }
+        console.log(`[WS_RECV] ${event.data}`);
 
         try {
             const msg = JSON.parse(event.data);

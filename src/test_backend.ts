@@ -1,5 +1,6 @@
 import { spawn } from "bun";
 import { join } from "path";
+import { existsSync, readFileSync, unlinkSync } from "fs";
 
 const PS_SCRIPT = join(import.meta.dir, "..", "wsl_tools.ps1");
 const TEST_INST = "Backend-Verify-Inst";
@@ -77,6 +78,39 @@ async function test() {
     const final = await runPs("list-json");
     const stopped = JSON.parse(final.stdout).find((i: any) => i.Name === TEST_INST);
     console.log(`✅ Final State: ${stopped.State}`);
+
+    // 7. Dashboard Port Flag Verification
+    console.log(`[1.7] Verifying dashboard --port flag...`);
+    const DASH_PORT = 3009;
+    const portFile = join(import.meta.dir, `.port.${DASH_PORT}`);
+    if (existsSync(portFile)) unlinkSync(portFile);
+
+    const dashProc = spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "dashboard", "--port", DASH_PORT.toString()], {
+        stdout: "pipe",
+        stderr: "pipe"
+    });
+    
+    let dashSuccess = false;
+    const dashTimeout = Date.now() + 20000;
+    
+    while (Date.now() < dashTimeout) {
+        if (existsSync(portFile)) {
+            const p = readFileSync(portFile, "utf8").trim();
+            if (p === DASH_PORT.toString()) {
+                dashSuccess = true;
+                break;
+            }
+        }
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    
+    dashProc.kill();
+    // Give PowerShell time to clean up its background job if needed
+    await new Promise(r => setTimeout(r, 2000));
+    if (existsSync(portFile)) unlinkSync(portFile);
+    
+    if (!dashSuccess) throw new Error("Dashboard failed to start on requested port via --port flag");
+    console.log("✅ Dashboard --port flag verified");
 
     console.log("\n--- BACKEND VERIFIED SUCCESSFULLY ---");
 }

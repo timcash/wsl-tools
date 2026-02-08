@@ -13,6 +13,15 @@ param (
     [int]$Port = 3000
 )
 
+# Handle Unix-style --port flag for the dashboard command
+if ($Command -eq "dashboard") {
+    if ($InstanceName -eq "--port" -and $BaseDistro -match "^\d+$") {
+        $Port = [int]$BaseDistro
+        $InstanceName = $null
+        $BaseDistro = "Ubuntu"
+    }
+}
+
 # Force UTF-8 for clean output to the dashboard
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -173,15 +182,19 @@ function Get-WSLInstances {
     Write-WslLog "Listing instances (JSON: $AsJson)..." -Quiet $AsJson
     if ($AsJson) {
         $lines = wsl.exe -l -v
-        
+        $tasks = Get-ScheduledTask -TaskName "WSL_Persist_*" -ErrorAction SilentlyContinue
+
         $parsed = $lines | Select-Object -Skip 1 | Where-Object { $_ -match "\w" } | ForEach-Object {
             $line = $_ -replace "\x00", "" -replace "^\s*\*\s*", "" -replace "^\s+", ""
             $parts = $line -split "\s+"
             if ($parts.Count -ge 3) {
+                $name = $parts[0]
+                $isPersisted = $null -ne ($tasks | Where-Object { $_.TaskName -eq "WSL_Persist_$name" })
                 [PSCustomObject]@{
-                    Name    = $parts[0]
-                    State   = $parts[1]
-                    Version = $parts[2]
+                    Name      = $name
+                    State     = $parts[1]
+                    Version   = $parts[2]
+                    Persisted = $isPersisted
                 }
             }
         }
@@ -399,7 +412,7 @@ switch ($Command) {
     "list-json" { Get-WSLInstances -AsJson $true }
     "fetch" { Save-WSLBase -Type $BaseDistro }
     "monitor" { Measure-WSLInstance -Name $InstanceName -AsJson $false }
-    "monitor-json" { Measure-WSLInstance -Name $InstanceName -AsJson $true }
+    "monitor-json" { Measure-WSLInstance -Name $InstanceName -AsJson $true 2>&1 }
     "dashboard" {
         $WebDir = Join-Path $PSScriptRoot "src"
         Write-Host "--- Dashboard Diagnostics (v2) ---" -ForegroundColor Gray
@@ -417,11 +430,12 @@ switch ($Command) {
             param($dir, $p)
             Set-Location $dir
             $env:PORT = $p
-            bun run dev
+            # Call bun directly and merge stderr into stdout to avoid NativeCommandError in PS
+            & bun --watch server.ts --port $p 2>&1
         } -ArgumentList $WebDir, $Port
 
         Write-Host "Waiting for dashboard to initialize..." -ForegroundColor Gray
-        $portFile = Join-Path $WebDir ".port"
+        $portFile = Join-Path $WebDir ".port.$Port"
         if (Test-Path $portFile) { Remove-Item $portFile }
 
         $timeout = (Get-Date).AddSeconds(15)
@@ -434,6 +448,7 @@ switch ($Command) {
             Write-Host "`n🚀 Dashboard is LIVE: http://localhost:$actualPort" -ForegroundColor Green
             Write-Host "Press Ctrl+C to stop (terminates background job)." -ForegroundColor Gray
             Receive-Job -Job $job -Wait
+            if (Test-Path $portFile) { Remove-Item $portFile }
         } else {
             Write-Error "Dashboard failed to start or write .port file within 15 seconds."
             Stop-Job $job

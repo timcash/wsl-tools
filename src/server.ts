@@ -84,6 +84,11 @@ async function tailLog() {
 
 tailLog();
 
+// Helper to aggressively sanitize strings for the dashboard
+function sanitize(text: string) {
+    return text.replace(/\0/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "").trim();
+}
+
 async function streamPsOutput(proc: any) {
     // Stream stdout
     (async () => {
@@ -92,7 +97,7 @@ async function streamPsOutput(proc: any) {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const text = decoder.decode(value).replace(/\0/g, "").trim();
+            const text = sanitize(decoder.decode(value));
             if (text) {
                 // Still publish list/stats if they come through stdout
                 if (text.startsWith('[') || text.startsWith('{')) {
@@ -112,7 +117,7 @@ async function streamPsOutput(proc: any) {
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const text = decoder.decode(value).replace(/\0/g, "").trim();
+            const text = sanitize(decoder.decode(value));
             if (text) {
                 console.error(`[PS-ERR] ${text}`);
                 server.publish("fleet", JSON.stringify({ type: 'ps-log', data: `[ERROR] ${text}` }));
@@ -123,8 +128,14 @@ async function streamPsOutput(proc: any) {
 
 const activeActions = new Set(); // Track instances undergoing manual actions
 
+let port = parseInt(process.env.PORT || "3000");
+const portIdx = Bun.argv.indexOf("--port");
+if (portIdx !== -1 && Bun.argv[portIdx + 1]) {
+    port = parseInt(Bun.argv[portIdx + 1]);
+}
+
 const server = Bun.serve({
-    port: parseInt(process.env.PORT || "3000"),
+    port: port,
     async fetch(req, server) {
         if (server.upgrade(req)) return;
 
@@ -203,21 +214,39 @@ const server = Bun.serve({
                     streamPsOutput(d);
                     d.exited.then(clearAction);
                 } else if (msg.type === 'daemon') {
-                    // Start in daemon (self-healing) mode
-                    console.log(`[SERVER] Executing: daemon ${msg.name}`);
+                    // Start in daemon (self-healing) mode AND persist
+                    console.log(`[SERVER] Executing: daemon & persist ${msg.name}`);
                     const d = ps("daemon", msg.name);
                     streamPsOutput(d);
-                    d.exited.then(clearAction);
+                    d.exited.then(() => {
+                        const p = ps("persist", msg.name);
+                        streamPsOutput(p);
+                        p.exited.then(clearAction);
+                    });
                 } else if (msg.type === 'terminate') {
-                    console.log(`[SERVER] Executing: stop ${msg.name}`);
+                    console.log(`[SERVER] Executing: stop & unpersist ${msg.name}`);
                     const s = ps("stop", msg.name);
                     streamPsOutput(s);
-                    s.exited.then(clearAction);
+                    s.exited.then(() => {
+                        const p = ps("unpersist", msg.name);
+                        streamPsOutput(p);
+                        p.exited.then(clearAction);
+                    });
                 } else if (msg.type === 'delete') {
                     console.log(`[SERVER] Executing: delete ${msg.name}`);
                     const d = ps("delete", msg.name);
                     streamPsOutput(d);
                     d.exited.then(clearAction);
+                } else if (msg.type === 'persist') {
+                    console.log(`[SERVER] Executing: persist ${msg.name}`);
+                    const p = ps("persist", msg.name);
+                    streamPsOutput(p);
+                    p.exited.then(clearAction);
+                } else if (msg.type === 'unpersist') {
+                    console.log(`[SERVER] Executing: unpersist ${msg.name}`);
+                    const p = ps("unpersist", msg.name);
+                    streamPsOutput(p);
+                    p.exited.then(clearAction);
                 }
             } catch (e) {
                 console.error(`[WS ERROR] Failed to process message: ${e}`);
@@ -240,7 +269,7 @@ const server = Bun.serve({
 });
 
 console.log(`[V2] Dashboard active at http://localhost:${server.port}`);
-Bun.write(".port", server.port.toString());
+Bun.write(`.port.${server.port}`, server.port.toString());
 
 // --- Monitoring Loop ---
 let lastStates = new Map();
