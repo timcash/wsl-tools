@@ -82,8 +82,20 @@ async function test() {
     // 7. Dashboard Port Flag Verification
     console.log(`[1.7] Verifying dashboard --port flag...`);
     const DASH_PORT = 3009;
-    const portFile = join(import.meta.dir, `.port.${DASH_PORT}`);
-    if (existsSync(portFile)) unlinkSync(portFile);
+
+    async function isPortOpen(port: number) {
+        try {
+            const conn = await Bun.connect({
+                hostname: "localhost",
+                port: port,
+                socket: { data() {}, open() {}, close() {}, error() {} }
+            });
+            conn.end();
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
 
     const dashProc = spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "dashboard", "--port", DASH_PORT.toString()], {
         stdout: "pipe",
@@ -94,12 +106,9 @@ async function test() {
     const dashTimeout = Date.now() + 20000;
     
     while (Date.now() < dashTimeout) {
-        if (existsSync(portFile)) {
-            const p = readFileSync(portFile, "utf8").trim();
-            if (p === DASH_PORT.toString()) {
-                dashSuccess = true;
-                break;
-            }
+        if (await isPortOpen(DASH_PORT)) {
+            dashSuccess = true;
+            break;
         }
         await new Promise(r => setTimeout(r, 1000));
     }
@@ -107,7 +116,6 @@ async function test() {
     dashProc.kill();
     // Give PowerShell time to clean up its background job if needed
     await new Promise(r => setTimeout(r, 2000));
-    if (existsSync(portFile)) unlinkSync(portFile);
     
     if (!dashSuccess) throw new Error("Dashboard failed to start on requested port via --port flag");
     console.log("✅ Dashboard --port flag verified");

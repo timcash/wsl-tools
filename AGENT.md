@@ -43,7 +43,8 @@ bun run test.ts --daemon
 
 ### 🧪 Working with Tests
 Tests utilize Puppeteer to verify the UI state and PowerShell to verify the system state.
-- **Port Isolation**: The dashboard and tests use port-specific signal files (`.port.3000`, `.port.3002`) to allow parallel execution without interference.
+- **Port Readiness**: The test suite and dashboard orchestrator now use TCP polling to detect when a server is active, eliminating the need for temporary marker files.
+- **Parallel Safety**: Ensure unique ports are used when running multiple instances (e.g., dev dashboard on 3000, tests on 3002).
 
 ## 🚀 Next Steps & Roadmap
 

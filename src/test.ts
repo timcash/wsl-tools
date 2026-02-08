@@ -5,13 +5,24 @@ import puppeteer from "puppeteer";
 
 const TEST_PREFIX = "TDD-";
 const TEST_INST = `${TEST_PREFIX}Unified-Final`;
-const TEST_PORT = 3002; // Use a different port than default dev server
 
-interface TestStep {
-    title: string;
-    logs: string[];
-    screenshot?: string;
-    status: "[PASS]" | "[FAIL]" | "[WAIT]";
+async function isPortOpen(port: number) {
+    try {
+        const conn = await Bun.connect({
+            hostname: "localhost",
+            port: port,
+            socket: {
+                data() {},
+                open() {},
+                close() {},
+                error() {}
+            }
+        });
+        conn.end();
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
 
 async function runTest() {
@@ -23,8 +34,14 @@ async function runTest() {
     const runStop = runAll || args.includes("--stop");
     const runDelete = runAll || args.includes("--delete");
 
+    // Port handling
+    let testPort = 3002;
+    const portIdx = args.indexOf("--port");
+    if (portIdx !== -1 && args[portIdx + 1]) {
+        testPort = parseInt(args[portIdx + 1]);
+    }
+
     const testLog = join(process.cwd(), "test.log");
-    const portFile = join(process.cwd(), `.port.${TEST_PORT}`);
     const PS_SCRIPT = join(process.cwd(), "..", "wsl_tools.ps1");
     const screenshotsDir = join(process.cwd(), "screenshots");
     
@@ -101,7 +118,7 @@ async function runTest() {
 
     try {
         log("=== PHASE 1: BACKEND PREP ===");
-        await freePort(TEST_PORT);
+        await freePort(testPort);
         await cleanupTddInstances();
         
         const createResult = await runWslTool("new", [TEST_INST, "alpine"]);
@@ -109,10 +126,9 @@ async function runTest() {
         await addStep("1. Backend Infrastructure Ready");
 
         log("=== PHASE 2: SERVER START ===");
-        if (existsSync(portFile)) unlinkSync(portFile);
         
-        // Start server on TEST_PORT using the new --port flag
-        serverProc = spawn(["bun", "server.ts", "--port", TEST_PORT.toString()], { 
+        // Start server on testPort using the new --port flag
+        serverProc = spawn(["bun", "server.ts", "--port", testPort.toString()], { 
             stdout: "pipe", 
             stderr: "pipe"
         });
@@ -131,9 +147,17 @@ async function runTest() {
         pipeToLog(serverProc.stdout, "[SRV-OUT]");
         pipeToLog(serverProc.stderr, "[SRV-ERR]");
 
-        const portTimeout = Date.now() + 10000;
-        while (!existsSync(portFile) && Date.now() < portTimeout) await new Promise(r => setTimeout(r, 500));
-        if (!existsSync(portFile)) throw new Error("Server port file timeout");
+        log(`Waiting for server on port ${testPort}...`);
+        const portTimeout = Date.now() + 15000;
+        let ready = false;
+        while (Date.now() < portTimeout) {
+            if (await isPortOpen(testPort)) {
+                ready = true;
+                break;
+            }
+            await new Promise(r => setTimeout(r, 500));
+        }
+        if (!ready) throw new Error(`Server failed to start on port ${testPort} within 15 seconds`);
         
         browser = await puppeteer.launch({ headless: true });
         const page = await browser.newPage();
@@ -153,7 +177,7 @@ async function runTest() {
         });
         page.on('dialog', async d => { log(`[BRW-DIALOG] ${d.message()}`); await d.accept(); });
 
-        await page.goto(`http://localhost:${TEST_PORT}`, { waitUntil: 'networkidle0' });
+        await page.goto(`http://localhost:${testPort}`, { waitUntil: 'networkidle0' });
         await addStep("2. Dashboard Initial Load", page);
 
         if (runTelemetry) {

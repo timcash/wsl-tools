@@ -269,7 +269,6 @@ const server = Bun.serve({
 });
 
 console.log(`[V2] Dashboard active at http://localhost:${server.port}`);
-Bun.write(`.port.${server.port}`, server.port.toString());
 
 // --- Monitoring Loop ---
 let lastStates = new Map();

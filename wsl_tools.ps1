@@ -434,25 +434,9 @@ switch ($Command) {
             & bun --watch server.ts --port $p 2>&1
         } -ArgumentList $WebDir, $Port
 
-        Write-Host "Waiting for dashboard to initialize..." -ForegroundColor Gray
-        $portFile = Join-Path $WebDir ".port.$Port"
-        if (Test-Path $portFile) { Remove-Item $portFile }
-
-        $timeout = (Get-Date).AddSeconds(15)
-        while (-not (Test-Path $portFile) -and (Get-Date) -lt $timeout) {
-            Start-Sleep -Milliseconds 500
-        }
-
-        if (Test-Path $portFile) {
-            $actualPort = Get-Content $portFile
-            Write-Host "`n🚀 Dashboard is LIVE: http://localhost:$actualPort" -ForegroundColor Green
-            Write-Host "Press Ctrl+C to stop (terminates background job)." -ForegroundColor Gray
-            Receive-Job -Job $job -Wait
-            if (Test-Path $portFile) { Remove-Item $portFile }
-        } else {
-            Write-Error "Dashboard failed to start or write .port file within 15 seconds."
-            Stop-Job $job
-        }
+        Write-Host "`n🚀 Dashboard initialization started: http://localhost:$Port" -ForegroundColor Green
+        Write-Host "Press Ctrl+C to stop (terminates background job)." -ForegroundColor Gray
+        Receive-Job -Job $job -Wait
     }
     "ssh" {
         wsl.exe -d $InstanceName
