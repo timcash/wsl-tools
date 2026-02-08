@@ -64,120 +64,88 @@ bun run test.ts
 
 # Test Result
 
-**Run:** 2/8/2026, 12:38:58 PM | **Status:** [PASS] PASSED
+**Run:** 2/8/2026, 1:16:18 PM | **Status:** 🔴 FAILED
 
-### [PASS] 1. Backend Infrastructure Ready
+> ⚠️ **ERROR SUMMARY**: FAILED: Start/Stats timeout
+
+### ✅ 1. Backend Infrastructure Ready
 
 ```text
-[12:38:37] === PHASE 1: BACKEND PREP ===
-[12:38:37] [SETUP] Ensuring port 3002 is free...
-[12:38:37] [CLEANUP] Removing any lingering TDD- instances...
-[12:38:37] [EXEC] wsl_tools.ps1 list-json 
-[12:38:38] [PS-STDOUT] [{"Name":"podman-machine-default","State":"Stopped","Version":"2"},{"Name":"test","State":"Running","Version":"2"},{"Name":"Ubuntu-24.04","State":"Stopped","Version":"2"}]
-[12:38:38] [EXEC] wsl_tools.ps1 new TDD-Unified-Final alpine
-[12:38:38] [PS-STDOUT] Creating new WSL instance 'TDD-Unified-Final' from 'alpine'...
+[13:15:10] === PHASE 1: BACKEND PREP ===
+[13:15:10] [SETUP] Ensuring port 3002 is free...
+[13:15:11] [CLEANUP] Removing any lingering TDD- instances...
+[13:15:11] [EXEC] wsl_tools.ps1 list-json 
+[13:15:11] [PS-STDOUT] [{"Name":"podman-machine-default","State":"Stopped","Version":"2"},{"Name":"test","State":"Running","Version":"2"},{"Name":"Ubuntu-24.04","State":"Stopped","Version":"2"}]
+[13:15:11] [EXEC] wsl_tools.ps1 new TDD-Unified-Final alpine
+[13:15:12] [PS-STDOUT] Creating new WSL instance 'TDD-Unified-Final' from 'alpine'...
 Importing TDD-Unified-Final from C:\Users\timca\WSL\_bases\alpine.tar.gz into C:\Users\timca\WSL\TDD-Unified-Final...
 The operation completed successfully. 
 Instance 'TDD-Unified-Final' created successfully from C:\Users\timca\WSL\_bases\alpine.tar.gz.
 ```
 
-### [PASS] 2. Dashboard Initial Load
+### ✅ 2. Dashboard Initial Load
 
 ![2. Dashboard Initial Load](src/screenshots/step_1.png)
 
 ```text
-[12:38:38] === PHASE 2: SERVER START ===
-[12:38:38] [SRV-OUT] [BUILD] Transpiling C:\Users\timca\code3\wsl-tools\src\app.ts -> C:\Users\timca\code3\wsl-tools\src\dist
-[12:38:38] [SRV-OUT] [BUILD] Success!
-[12:38:38] [SRV-OUT] [TAIL] Starting log tail on: C:\Users\timca\code3\wsl-tools\src\powershell.log
-[12:38:38] [SRV-OUT] [V2] Dashboard active at http://localhost:3002
-[12:38:39] [SRV-OUT] [HTTP] GET / (rel: )
-[12:38:39] [SRV-OUT] [HTTP] GET /style.css (rel: style.css)
-[12:38:39] [SRV-OUT] [HTTP] GET /app.js (rel: app.js)
-[12:38:39] [SRV-OUT] [HTTP] GET /wsl_cpu_network.png (rel: wsl_cpu_network.png)
-[12:38:39] [BRW-CONSOLE] [WS] Attempting connection...
-[12:38:39] [SRV-OUT] [WS] Client connected
-[12:38:39] [BRW-CONSOLE] [WS] Connected to backend
-[12:38:39] [SRV-OUT] [HTTP] GET /favicon.ico (rel: favicon.ico)
-[12:38:39] [BRW-CONSOLE] Failed to load resource: the server responded with a status of 404 (Not Found)
-[12:38:39] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
+[13:15:12] === PHASE 2: SERVER START ===
+[13:15:12] [SRV-OUT] [BUILD] Transpiling C:\Users\timca\code3\wsl-tools\src\app.ts -> C:\Users\timca\code3\wsl-tools\src\dist
+[13:15:12] [SRV-OUT] [BUILD] Success!
+[13:15:12] [SRV-OUT] [TAIL] Starting log tail on: C:\Users\timca\code3\wsl-tools\src\powershell.log
+[13:15:12] [SRV-OUT] [V2] Dashboard active at http://localhost:3002
+[13:15:13] [SRV-OUT] [HTTP] GET / (rel: )
+[13:15:13] [SRV-OUT] [HTTP] GET /style.css (rel: style.css)
+[13:15:13] [SRV-OUT] [HTTP] GET /app.js (rel: app.js)
+[13:15:13] [SRV-OUT] [HTTP] GET /wsl_cpu_network.png (rel: wsl_cpu_network.png)
+[13:15:13] [BRW-CONSOLE] [WS] Attempting connection...
+[13:15:13] [SRV-OUT] [WS] Client connected
+[13:15:13] [BRW-CONSOLE] [WS] Connected to backend
+[13:15:13] [SRV-OUT] [HTTP] GET /favicon.ico (rel: favicon.ico)
+[13:15:13] [BRW-CONSOLE] Failed to load resource: the server responded with a status of 404 (Not Found)
+[13:15:13] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
 ```
 
-### [PASS] 3. Instance Online & Telemetry Flow
-
-![3. Instance Online & Telemetry Flow](src/screenshots/step_2.png)
+### ❌ FAILED: Start/Stats timeout
 
 ```text
-[12:38:40] === PHASE 3: START & TELEMETRY ===
-[12:38:40] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Starting)
-[12:38:40] [SRV-OUT] [WS] Received: {"type":"start","name":"TDD-Unified-Final"}
-[12:38:40] [SRV-OUT] [WS] Parsed Action: start on TDD-Unified-Final
-[12:38:40] [SRV-OUT] [SERVER] Executing: da
-[12:38:40] [SRV-OUT] emon TDD-Unified-Final
-[12:38:40] [SRV-OUT] [PS-OUT] Starting daemon for WSL instance 'TDD-Unified-Final'...
-[12:38:40] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:40] [INFO] Command Entry: daemon TDD-Unified-Final
-[12:38:40] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:40] [INFO] Request: Sta
-[12:38:40] [SRV-OUT] rt daemon for 'TDD-Unified-Final'
-[12:38:40] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:40] [INFO] Action: Detaching background process (wsl -d TDD-Unified-Final -- sleep infinity)
-[12:38:41] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: podman-machine-default
-[12:38:41] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
-[12:38:41] [BRW-CONSOLE] [UI_ONLINE] Instance online: TDD-Unified-Final
-[12:38:41] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: Ubuntu-24.04
-[12:38:41] [SRV-OUT] [STATE] podman-machine-default: Unknown -> Stopped
-[12:38:41] [SRV-OUT] [STATE] test: Unknown -> Running
-[12:38:42] [SRV-OUT] [STATE] Ubuntu-24.04: Unknown -> Stopped
-[12:38:42] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 526MB / 15847MB
-[12:38:42] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Disk: 8.2M / 1006.9G
-[12:38:42] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:42] [WARN] Warning: Daemon process started but instance 'TDD-Unified-Final' still shows as [2]
-[12:38:45] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 529MB / 15847MB
-[12:38:48] [SRV-OUT] [STATE] TDD-Unified-Final: Unknown -> Running
-[12:38:48] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 533MB / 15847MB
-[12:38:48] [BRW-CONSOLE] [UI_UPDATE] Stats updated: TDD-Unified-Final Mem: 535MB / 15847MB
-[12:38:48] [BRW-CONSOLE] [UI_UPDATE] Stats updated: TDD-Unified-Final Disk: 8.2M / 1006.9G
-```
-
-### [PASS] 4. Graceful Stop via UI
-
-![4. Graceful Stop via UI](src/screenshots/step_3.png)
-
-```text
-[12:38:49] === PHASE 4: STOP FLOW ===
-[12:38:51] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Stopping)
-[12:38:51] [SRV-OUT] [WS] Received: {"type":"terminate","name":"TDD-Unified-Final"}
-[12:38:51] [SRV-OUT] [WS] Parsed Action: terminate on TDD-Unified-Final
-[12:38:51] [SRV-OUT] [SERVER] Executing: stop TDD-Unified-Final
-[12:38:51] [4.1] Clicked Stop button
-[12:38:51] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 535MB / 15847MB
-[12:38:51] [SRV-OUT] [PS-OUT] Stopping WSL instance 'TDD-Unified-Final'...
-[12:38:51] [SRV-OUT] [PS-OUT] The operation completed successfully.
-[12:38:51] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:51] [INFO] Command Entry: stop TDD-Unified-Final
-[12:38:51] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:51] [INFO] Request: Stop instance 'TDD-Unified-Final'
-[12:38:52] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: TDD-Unified-Final
-[12:38:52] [SRV-OUT] [PS-OUT] The operation completed successfully.
-```
-
-### [PASS] 5. Instance Unregistered & UI Cleanup
-
-![5. Instance Unregistered & UI Cleanup](src/screenshots/step_4.png)
-
-```text
-[12:38:53] === PHASE 5: DELETE FLOW ===
-[12:38:54] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 495MB / 15847MB
-[12:38:55] [5.1] Triggering delete via window.app.delete evaluate...
-[12:38:55] [BRW-DIALOG] Are you sure you want to delete TDD-Unified-Final?
-[12:38:55] [BRW-CONSOLE] [UI_ACTION] Delete requested for: TDD-Unified-Final
-[12:38:55] [BRW-DIALOG] Are you sure you want to delete TDD-Unified-Final?
-[12:38:55] [BRW-CONSOLE] [UI_ACTION] Confirmed delete for: TDD-Unified-Final. Sending WS message.
-[12:38:55] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Deleting)
-[12:38:55] [SRV-OUT] [WS] Received: {"type":"delete","name":"TDD-Unified-Final"}
-[12:38:55] [SRV-OUT] [WS] Parsed Action: delete on TDD-Unified-Final
-[12:38:55] [SRV-OUT] [SERVER] Executing: delete TDD-Unified-Final
-[12:38:55] [SRV-OUT] [PS-OUT] Unregistering WSL instance 'TDD-Unified-Final'...
-[12:38:55] [SRV-OUT] [PS-OUT] Instance 'TDD-Unified-Final' stopped and background jobs cleared.
-[12:38:55] [SRV-OUT] [PS-OUT] The operation completed successfully.
-[12:38:55] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:55] [INFO] Command Entry: delete TDD-Unified-Final
-[12:38:55] [SRV-OUT] [PS-LOG] [2026-02-08 12:38:55] [INFO] Status: Instance 'TDD-Unified-Final' stopped.
-[12:38:56] [BRW-CONSOLE] [UI_DELETED] Instance removed: TDD-Unified-Final
-[12:38:57] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 494MB / 15847MB
+[13:15:13] === PHASE 3: START & TELEMETRY ===
+[13:15:13] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Starting)
+[13:15:13] [SRV-OUT] [WS] Received: {"type":"start","name":"TDD-Unified-Final"}
+[13:15:13] [SRV-OUT] [WS] Parsed Action: start on TDD-Unified-Final
+[13:15:13] [SRV-OUT] [SERVER] Executing: daemon TDD-Unified-Final
+[13:15:13] [SRV-OUT] [PS-OUT] Starting self-healing daemon for WSL instance 'TDD-Unified-Final'...
+[13:15:14] [SRV-OUT] [PS-OUT] Id     Name            PSJobTypeName   State         HasMoreData     Location             Command
+[13:15:14] [SRV-OUT] [PS-OUT] --     ----            -------------   -----         -----------     --------             -------
+[13:15:14] [SRV-OUT] [PS-OUT] 1      WSL_Daemon_T... BackgroundJob   Running       True            localhost            ...
+[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:13] [INFO] Command Entry: daemon TDD-Unified-Final
+[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:13] [INFO] Request: Sta
+[13:15:14] [SRV-OUT] rt daemon (self-healing) for 'TDD-Unified-Final'
+[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:14] [INFO] Action: Detached self-healing job (WSL_Daemon_TDD-Unified-Final)
+[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:14] [INFO] [DAEMON] Daemon loop started for TDD-Unified-Final
+[13:15:14] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:14] [INFO] [DAEMON] Daemon starting/ensuring TDD-Unified-Final...
+[13:15:14] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: podman-machine-default
+[13:15:14] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
+[13:15:14] [BRW-CONSOLE] [UI_ONLINE] Instance online: TDD-Unified-Final
+[13:15:14] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: Ubuntu-24.04
+[13:15:15] [SRV-OUT] [STATE] podman-machine-default: Unknown -> Stopped
+[13:15:15] [SRV-OUT] [STATE] test: Unknown -> Running
+[13:15:15] [SRV-OUT] [STATE] Ubuntu-24.04: Unknown -> Stopped
+[13:15:15] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 534MB / 15847MB
+[13:15:15] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Disk: 8.2M / 1006.9G
+[13:15:16] [SRV-OUT] [PS-LOG] [2026-02-08 13:15:16] [WARN] Warning: Daemon job started but instance 'TDD-Unified-Final' still shows as [2]
+[13:15:21] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 538MB / 15847MB
+[13:15:24] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 536MB / 15847MB
+[13:15:30] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: TDD-Unified-Final
+[13:15:30] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 500MB / 15847MB
+[13:15:33] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 501MB / 15847MB
+[13:15:36] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 502MB / 15847MB
+[13:15:42] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 503MB / 15847MB
+[13:15:49] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 504MB / 15847MB
+[13:15:52] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 503MB / 15847MB
+[13:15:55] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 504MB / 15847MB
+[13:16:04] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 505MB / 15847MB
+[13:16:07] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 503MB / 15847MB
+[13:16:14] 
+[FAIL] FAILURE: Start/Stats timeout
 ```
 

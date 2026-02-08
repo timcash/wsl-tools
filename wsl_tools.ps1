@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("new", "daemon", "stop", "list", "fetch", "monitor", "list-json", "monitor-json", "dashboard", "ssh", "delete", "unregister")]
+    [ValidateSet("new", "start", "daemon", "stop", "list", "fetch", "monitor", "list-json", "monitor-json", "dashboard", "ssh", "delete", "unregister", "persist", "unpersist")]
     [string]$Command,
 
     [Parameter(Mandatory = $false, Position = 1)]
@@ -34,9 +34,11 @@ function Write-WslLog {
     param($Message, $Level = "INFO", $Quiet = $false)
     if ($Quiet) { return }
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $logLine = "[$timestamp] [$Level] $Message"
     
-    # Still write to file but ignore errors if locked
+    # Aggressive sanitization to prevent "flashing" and broken terminal rendering
+    $cleanMessage = $Message -replace "\x00", "" -replace "[\x00-\x08\x0B\x0C\x0E-\x1F]", ""
+    $logLine = "[$timestamp] [$Level] $cleanMessage"
+    
     try {
         $logDir = [System.IO.Path]::GetDirectoryName($LOG_FILE)
         if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
@@ -253,23 +255,68 @@ function New-WSLInstance {
     }
 }
 
+function Start-WSLSimple {
+    param($Name)
+    Write-WslLog "Request: Simple start (non-daemon) for '$Name'"
+    Write-Host "Starting WSL instance '$Name' in background (no self-healing)..." -ForegroundColor Cyan
+    Start-Process -FilePath "wsl.exe" -ArgumentList "-d", $Name, "-u", "root", "--", "sh", "-c", "while true; do sleep 3600; done" -NoNewWindow
+    Start-Sleep -Seconds 2
+    Write-Host "Instance started." -ForegroundColor Green
+}
+
 function Start-WSLDaemon {
     param($Name)
     
-    Write-WslLog "Request: Start daemon for '$Name'"
-    Write-Host "Starting daemon for WSL instance '$Name'..." -ForegroundColor Cyan
+    Write-WslLog "Request: Start daemon (self-healing) for '$Name'"
+    Write-Host "Starting self-healing daemon for WSL instance '$Name'..." -ForegroundColor Cyan
     
-    if (Test-WSLInstanceExists -Name $Name) {
-        $statusLine = wsl.exe -l -v | Select-String -Pattern "^\s*\*?\s*$Name\b"
-        if ($statusLine -match "Running") {
-            Write-Host "Instance '$Name' is already running." -ForegroundColor Yellow
-            Write-WslLog "'$Name' is already running. Skipping daemon start." "DEBUG"
-            return
+    $jobName = "WSL_Daemon_$Name"
+    if (Get-Job -Name $jobName -ErrorAction SilentlyContinue) {
+        Write-Host "Daemon for '$Name' is already running (Job: $jobName)." -ForegroundColor Yellow
+        Write-WslLog "'$Name' daemon job already exists. Skipping." "DEBUG"
+        return
+    }
+
+    # Start the job
+    $scriptBlock = {
+        param($distro, $logPath)
+        
+        function Job-Log {
+            param($msg, $level = "INFO")
+            try {
+                $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                Add-Content -Path $logPath -Value "[$ts] [$level] [DAEMON] $msg" -ErrorAction SilentlyContinue
+            } catch {}
+        }
+
+        Job-Log "Daemon loop started for ${distro}"
+        
+        try {
+            while ($true) {
+                try {
+                    Job-Log "Daemon starting/ensuring ${distro}..."
+                    # We use Start-Process -Wait because it's much better at detecting the exit 
+                    # of the primary wsl.exe process even if the instance is terminated externally.
+                    $p = Start-Process -FilePath "wsl.exe" -ArgumentList "-d", $distro, "-u", "root", "--", "sh", "-c", "while true; do sleep 3600; done" -NoNewWindow -PassThru -ErrorAction Stop
+                    $p.WaitForExit()
+                    Job-Log "Daemon process for ${distro} exited (Code: $($p.ExitCode))." "WARN"
+                }
+                catch {
+                    Job-Log "Daemon encountered error for ${distro}: $_" "ERROR"
+                }
+                
+                Job-Log "Restarting in 5s..."
+                Start-Sleep -Seconds 5
+            }
+        }
+        catch {
+            Job-Log "CRITICAL: Daemon loop for ${distro} crashed: $_" "ERROR"
         }
     }
 
-    Write-WslLog "Action: Detaching background process (wsl -d $Name -- sleep infinity)"
-    Start-Process -FilePath "wsl.exe" -ArgumentList "-d", $Name, "--", "sleep", "infinity" -NoNewWindow
+    Start-Job -Name $jobName -ScriptBlock $scriptBlock -ArgumentList $Name, $LOG_FILE
+    Write-WslLog "Action: Detached self-healing job ($jobName)"
+    
     Start-Sleep -Seconds 2
     
     $statusLine = wsl.exe -l -v | Select-String -Pattern "^\s*\*?\s*$Name\b"
@@ -277,7 +324,32 @@ function Start-WSLDaemon {
         Write-Host "Daemon started and verified for '$Name'." -ForegroundColor Green
         Write-WslLog "Status: Verified 'Running' for '$Name'."
     } else {
-        Write-WslLog "Warning: Daemon process started but instance '$Name' still shows as $($statusLine -split '\s+')[2]" "WARN"
+        Write-WslLog "Warning: Daemon job started but instance '$Name' still shows as $($statusLine -split '\s+')[2]" "WARN"
+    }
+}
+
+function Register-WslTask {
+    param($Name)
+    $TaskName = "WSL_Persist_$Name"
+    
+    Write-Host "Registering Windows Task '$TaskName' for reboot persistence..." -ForegroundColor Cyan
+    
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSScriptRoot\wsl_tools.ps1`" daemon $Name"
+    $trigger = New-ScheduledTaskTrigger -AtLogOn 
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+    
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
+    
+    Write-Host "Task registered. $Name will now start automatically when you log in." -ForegroundColor Green
+}
+
+function Unregister-WslTask {
+    param($Name)
+    $TaskName = "WSL_Persist_$Name"
+    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+        Write-Host "Removing Windows Task '$TaskName'..." -ForegroundColor Yellow
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
     }
 }
 
@@ -287,23 +359,32 @@ function Stop-WSLInstance {
     Write-WslLog "Request: Stop instance '$Name'"
     Write-Host "Stopping WSL instance '$Name'..." -ForegroundColor Cyan
     
-    # 1. Terminate the instance itself
+    # 1. Stop the self-healing job first
+    $jobName = "WSL_Daemon_$Name"
+    $job = Get-Job -Name $jobName -ErrorAction SilentlyContinue
+    if ($job) {
+        Write-WslLog "Action: Stopping daemon job $jobName" "DEBUG"
+        Stop-Job $job
+        Remove-Job $job
+    }
+
+    # 2. Terminate the instance itself
     wsl.exe --terminate $Name
     
-    # 2. Find and kill any detached background processes (Start-Process wsl ...)
+    # 3. Find and kill any lingering wsl.exe processes for this instance
     $procs = Get-CimInstance Win32_Process -Filter "Name = 'wsl.exe'" | Where-Object { $_.CommandLine -match "-d\s+$Name\b" }
     foreach ($p in $procs) {
         Write-WslLog "Action: Killing background wsl process $($p.ProcessId) for $Name" "DEBUG"
         Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
     }
 
-    # 3. If it is a TDD instance, be even more aggressive to prevent auto-restart loops
+    # 4. If it is a TDD instance, be even more aggressive
     if ($Name.StartsWith("TDD-")) {
         Start-Sleep -Seconds 1
         wsl.exe --terminate $Name
     }
 
-    Start-Sleep -Seconds 3
+    Start-Sleep -Seconds 2
     Write-Host "Instance '$Name' stopped and background jobs cleared." -ForegroundColor Green
     Write-WslLog "Status: Instance '$Name' stopped."
 }
@@ -311,6 +392,7 @@ function Stop-WSLInstance {
 # --- Main Switch ---
 switch ($Command) {
     "new" { New-WSLInstance -Name $InstanceName -Base $BaseDistro }
+    "start" { Start-WSLSimple -Name $InstanceName }
     "daemon" { Start-WSLDaemon -Name $InstanceName }
     "stop" { Stop-WSLInstance -Name $InstanceName }
     "list" { Get-WSLInstances -AsJson $false }
@@ -360,11 +442,17 @@ switch ($Command) {
     "ssh" {
         wsl.exe -d $InstanceName
     }
+    "persist" { Register-WslTask -Name $InstanceName }
+    "unpersist" { Unregister-WslTask -Name $InstanceName }
     "unregister" {
+        Unregister-WslTask -Name $InstanceName
+        Stop-WSLInstance -Name $InstanceName
         Write-Host "Unregistering WSL instance '$InstanceName'..." -ForegroundColor Cyan
         wsl.exe --unregister $InstanceName
     }
     "delete" {
+        Unregister-WslTask -Name $InstanceName
+        Stop-WSLInstance -Name $InstanceName
         Write-Host "Unregistering WSL instance '$InstanceName'..." -ForegroundColor Cyan
         wsl.exe --unregister $InstanceName
     }

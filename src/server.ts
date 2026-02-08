@@ -194,33 +194,16 @@ const server = Bun.serve({
                         const d = ps("daemon", msg.name);
                         streamPsOutput(d);
                         await d.exited;
-                        console.log(`[SERVER] 'daemon' spawned. Polling for 'Running' state...`);
-                        
-                        // Poll for up to 10 seconds to catch the 'Running' state
-                        let attempts = 0;
-                        const poll = async () => {
-                            const proc = ps("list-json");
-                            const text = await new Response(proc.stdout).text();
-                            if (text.trim()) {
-                                try {
-                                    const list = JSON.parse(text);
-                                    server.publish("fleet", JSON.stringify({ type: 'list', data: list }));
-                                    const inst = list.find((i: any) => i.Name === msg.name);
-                                    if (inst && inst.State === 'Running') {
-                                        console.log(`[SERVER] Instance ${msg.name} is now Running.`);
-                                        clearAction();
-                                        return;
-                                    }
-                                } catch (e) {
-                                    console.error("[SERVER] Poll list-json parse error:", e, "Text:", text);
-                                }
-                            }
-                            if (attempts++ < 10) setTimeout(poll, 1000);
-                            else clearAction();
-                        };
-                        poll();
+                        clearAction();
                     });
                 } else if (msg.type === 'start') {
+                    // Start in non-daemon mode
+                    console.log(`[SERVER] Executing: start ${msg.name}`);
+                    const d = ps("start", msg.name);
+                    streamPsOutput(d);
+                    d.exited.then(clearAction);
+                } else if (msg.type === 'daemon') {
+                    // Start in daemon (self-healing) mode
                     console.log(`[SERVER] Executing: daemon ${msg.name}`);
                     const d = ps("daemon", msg.name);
                     streamPsOutput(d);

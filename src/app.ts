@@ -44,10 +44,13 @@ function createInstanceCard(inst: any) {
                 <button class="btn btn-ghost btn-sm" aria-label="Copy ${inst.Name}" title="Copy Command" onclick="window.app.copySsh('${inst.Name}')">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                 </button>
-                <button class="btn btn-ghost btn-sm" aria-label="Start ${inst.Name}" onclick="window.app.start('${inst.Name}')" ${isRunning || isTransitioning ? 'disabled' : ''}>
+                <button class="btn btn-ghost btn-sm" aria-label="Start ${inst.Name}" title="Start (Non-Daemon)" onclick="window.app.start('${inst.Name}')" ${isRunning || isTransitioning ? 'disabled' : ''}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 </button>
-                <button class="btn btn-ghost btn-sm" aria-label="Stop ${inst.Name}" onclick="window.app.stop('${inst.Name}')" ${!isRunning || isTransitioning ? 'disabled' : ''}>
+                <button class="btn btn-ghost btn-sm" style="color: hsl(150, 70%, 50%);" aria-label="Daemon ${inst.Name}" title="Daemon (Self-Healing)" onclick="window.app.daemon('${inst.Name}')" ${isRunning || isTransitioning ? 'disabled' : ''}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                </button>
+                <button class="btn btn-ghost btn-sm" aria-label="Stop ${inst.Name}" title="Stop" onclick="window.app.stop('${inst.Name}')" ${!isRunning || isTransitioning ? 'disabled' : ''}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
                 </button>
                 <button class="btn btn-ghost btn-sm" style="color: hsl(0, 70%, 60%);" aria-label="Delete ${inst.Name}" onclick="window.app.delete('${inst.Name}')" ${isTransitioning ? 'disabled' : ''}>
@@ -263,6 +266,10 @@ function updateStats(stats: any) {
     start: (name: string) => {
         ensurePlaceholder(name, 'Starting');
         state.ws?.send(JSON.stringify({ type: 'start', name }));
+    },
+    daemon: (name: string) => {
+        ensurePlaceholder(name, 'Starting');
+        state.ws?.send(JSON.stringify({ type: 'daemon', name }));
     },
     stop: (name: string) => {
         ensurePlaceholder(name, 'Stopping');

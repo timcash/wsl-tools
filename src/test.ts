@@ -145,8 +145,8 @@ async function runTest() {
         await addStep("2. Dashboard Initial Load", page);
 
         log("=== PHASE 3: START & TELEMETRY ===");
-        await page.click(`button[aria-label="Start ${TEST_INST}"]`);
-        const startTimeout = Date.now() + 45000;
+        await page.click(`button[aria-label="Daemon ${TEST_INST}"]`);
+        const startTimeout = Date.now() + 60000;
         while (Date.now() < startTimeout) {
             if (uiState.online && uiState.stats) break;
             await new Promise(r => setTimeout(r, 1000));
@@ -184,6 +184,65 @@ async function runTest() {
         if (!uiState.deleted) throw new Error("Delete timeout");
         await addStep("5. Instance Unregistered & UI Cleanup", page);
 
+        log("=== PHASE 6: DAEMON SELF-HEALING ===");
+        // 1. Re-create and start daemon
+        log("[6.1] Re-creating instance for healing test...");
+        await runWslTool("new", [TEST_INST, "alpine"]);
+        
+        log("[6.2] Waiting for UI to detect new instance...");
+        await page.waitForSelector(`button[aria-label="Daemon ${TEST_INST}"]`, { timeout: 10000 });
+        
+        log("[6.3] Starting daemon...");
+        uiState.online = false; // Reset state
+        await page.click(`button[aria-label="Daemon ${TEST_INST}"]`);
+        
+        const healStartTimeout = Date.now() + 30000;
+        while (Date.now() < healStartTimeout && !uiState.online) await new Promise(r => setTimeout(r, 1000));
+        if (!uiState.online) throw new Error("Failed to start instance for healing test");
+        log("[6.4] Instance is running. Now terminating it externally to test self-healing...");
+
+        // 2. Terminate the instance directly (this should cause the daemon's wsl process to exit and then restart)
+        log(`[6.5] Executing: wsl --terminate ${TEST_INST}`);
+        const killProc = spawn(["wsl", "--terminate", TEST_INST]);
+        await killProc.exited;
+
+        uiState.online = false; // Reset to wait for restart
+        log("[6.6] Instance terminated. Waiting for self-healing restart (approx 10-15s)...");
+        await new Promise(r => setTimeout(r, 7000)); // Give daemon time to see exit and wait 5s
+
+        const healingTimeout = Date.now() + 60000;
+        let healed = false;
+        while (Date.now() < healingTimeout) {
+            if (uiState.online) {
+                healed = true;
+                break;
+            }
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        if (!healed) throw new Error("Daemon failed to restart instance after external termination");
+        log("[6.7] SELF-HEALING VERIFIED: Instance turned back on automatically.");
+        await addStep("6. Daemon Self-Healing Verified", page);
+
+        log("=== PHASE 7: OS PERSISTENCE (TASK SCHEDULER) ===");
+        log("[7.1] Registering persistence for reboot...");
+        await runWslTool("persist", [TEST_INST]);
+
+        log("[7.2] Verifying task existence via Get-ScheduledTask...");
+        const taskCheck = spawn(["powershell", "-Command", `Get-ScheduledTask -TaskName "WSL_Persist_${TEST_INST}"`]);
+        const taskExit = await taskCheck.exited;
+        
+        if (taskExit !== 0) throw new Error("Scheduled Task was not created by 'persist' command");
+        log("[7.3] Windows Scheduled Task verified. It will survive reboots.");
+
+        log("[7.4] Testing unpersist cleanup...");
+        await runWslTool("unpersist", [TEST_INST]);
+        const taskCheckCleanup = spawn(["powershell", "-Command", `Get-ScheduledTask -TaskName "WSL_Persist_${TEST_INST}"`]);
+        const taskExitCleanup = await taskCheckCleanup.exited;
+        if (taskExitCleanup === 0) throw new Error("Scheduled Task was NOT removed by 'unpersist' command");
+        log("[7.5] OS Persistence cleanup verified.");
+        await addStep("7. OS Persistence Verified (Windows Task Scheduler)", page);
+
         log("\nALL TESTS PASSED");
 
     } catch (err: any) {
@@ -205,14 +264,27 @@ async function runTest() {
             const readmePath = join(process.cwd(), "..", "README.md");
             let content = readFileSync(readmePath, 'utf8');
             const marker = '# Test Result';
-            let report = `${marker}\n\n**Run:** ${new Date().toLocaleString()} | **Status:** ${highSeverityError ? '[FAIL] FAILED' : '[PASS] PASSED'}\n\n`;
+            
+            let statusBadge = highSeverityError ? "🔴 FAILED" : "🟢 PASSED";
+            let report = `${marker}\n\n**Run:** ${new Date().toLocaleString()} | **Status:** ${statusBadge}\n\n`;
+            
+            if (highSeverityError) {
+                report += `> ⚠️ **ERROR SUMMARY**: ${steps[steps.length-1].title}\n\n`;
+            }
+
             for (const step of steps) {
-                report += `### ${step.status} ${step.title}\n\n`;
+                const sBadge = step.status === "[PASS]" ? "✅" : "❌";
+                report += `### ${sBadge} ${step.title}\n\n`;
                 if (step.screenshot) {
                     report += `![${step.title}](${step.screenshot})\n\n`;
                 }
                 if (step.logs.length > 0) {
-                    report += "```text\n" + step.logs.join('\n') + "\n```\n\n";
+                    // Only show first 10 and last 10 lines if log is huge
+                    let displayLogs = step.logs;
+                    if (displayLogs.length > 40) {
+                        displayLogs = [...displayLogs.slice(0, 20), "... (omitted for brevity) ...", ...displayLogs.slice(-20)];
+                    }
+                    report += "```text\n" + displayLogs.join('\n') + "\n```\n\n";
                 }
             }
             const idx = content.indexOf(marker);

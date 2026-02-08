@@ -1,55 +1,40 @@
 # AGENT.md - WSL Tools Testing & TDD Workflow
 
+> [!IMPORTANT]
+> **CURRENT ISSUES (Feb 8, 2026)**
+> 1. **Terminal Flashing**: PowerShell and `wsl.exe` output null bytes (`\0`) that cause terminal flickering. We are aggressively sanitizing `stdout` in the script and server to fix this.
+> 2. **WSL Propagation Delay**: WSL sometimes reports "Running" while still terminating. The test suite now includes 7s "settle" periods during self-healing checks.
+> 3. **Task Scheduler Permissions**: `persist` requires the user to be in the "Administrators" group to register startup tasks.
+
 This project follows a strict **TDD (Test-Driven Development)** and **Log-Focused** architecture. Verification is driven by Puppeteer, which orchestrates the frontend and validates system state through intercepted telemetry.
 
 ## 🧪 Testing Infrastructure
 
 ### 1. `src/test.ts` (The Orchestrator)
 The primary test suite manages the full lifecycle:
-- **Isolation**: The test suite uses a dedicated port (default 3002) and only manages instances prefixed with `TDD-`. This allows you to run the development dashboard while simultaneously running tests.
-- **Phase 1: Backend Verification**: Independently verifies `wsl_tools.ps1` commands (`new`, `delete`, `list-json`) to ensure the foundation is solid.
-- **Phase 2: Unified Trace**: Launches the dashboard and browser, performing an end-to-end trace from UI action -> WebSocket -> PowerShell -> File Log -> UI Telemetry.
+- **Isolation**: The test suite uses a dedicated port (default 3002) and only manages instances prefixed with `TDD-`.
+- **Phase 6 (Self-Healing)**: Starts a daemon, runs `wsl --terminate`, and verifies the instance turns back on automatically after 5s.
+- **Phase 7 (OS Persistence)**: Registers a Windows Scheduled Task and verifies its existence in the OS registry.
 
-### 2. Unified Logging & Sanitization
-All logs are consolidated into `src/test.log` and the `README.md` report.
-- **Sanitization**: All output is forced to UTF-8 and sanitized to strip null bytes (`\0`) and non-printable characters that cause "strange squares" in Windows stdout.
-- **Flow**: PowerShell (stderr) -> Bun Server (stdout) -> Puppeteer Console -> Unified Test Log.
+### 3. Self-Healing & Persistence
+- **Daemon Mode**: A persistent PowerShell job that monitors a WSL instance. If the instance dies, the job restarts it after a 5-second cooldown.
+- **OS Persistence**: Uses Windows Task Scheduler to register instances to start automatically **At Log On**.
 
 ## 🛠️ Repository Workflow
 
 ### 🖥️ Running the Dashboard
-The dashboard uses Bun in watch mode for live-reload of `app.ts` and `style.css`.
 ```powershell
-# Default port 3000
 .\wsl_tools.ps1 dashboard
-
-# Custom port
-.\wsl_tools.ps1 dashboard -Port 8080
 ```
 
-### 📋 High-Density UI
-The UI is a spreadsheet-style table designed for maximum information density:
-- **Instance**: Name of the WSL distribution.
-- **Status**: Real-time state (Running, Stopped, etc.).
-- **Memory/Storage**: Live telemetry.
-- **Actions**: Start, Stop, Delete, and **Copy Command** (copies `wsl -d <name>` to clipboard).
-
 ### 🧪 Working with Tests
-Tests are designed to be non-destructive to your existing WSL instances.
-- **Prefixing**: Only instances named `TDD-*` are touched by the automated suite.
-- **Port Management**: The test suite will automatically attempt to free its target port (3002) before starting the internal test server.
-- **Aggressive Stop**: For `TDD-` instances, the `stop` command is more aggressive to prevent auto-restart loops during verification.
-
-## 🛠️ Troubleshooting
-
-1.  **Check `src/test.log`**: This is the unified stream.
-2.  **JSON Parse Errors**: Usually caused by PowerShell logging to `stdout`. Use `Write-WslLog` in the script to ensure logs stay in `stderr` or the log file.
-3.  **Process Hanging**: If a test hangs, check if a background `wsl.exe` process is stuck. The test suite attempts to kill these, but manual intervention (`wsl --shutdown`) may be needed in extreme cases.
+```bash
+cd src
+bun run test.ts
+```
 
 ## 🚀 Next Steps & Roadmap
 
-- [ ] **Terminal Integration**: Add a button to spawn a real Windows Terminal window directly into the instance.
-- [ ] **Bulk Actions**: Implement "Start All" and "Stop All" for managed fleets.
-- [ ] **Resource Graphs**: Transition from text-based telemetry to small sparkline graphs for CPU/Memory history.
-- [ ] **Distro Templates**: Support custom rootfs templates beyond the default Alpine mini-rootfs.
-- [ ] **WSL Settings**: UI for modifying `.wslconfig` and instance-specific flags (like memory limits).
+- [x] **OS Persistence**: Integrated with Windows Task Scheduler (`persist` / `unpersist`).
+- [ ] **UI Persistence Toggle**: Add a "Pin" icon to the dashboard to toggle OS-level persistence.
+- [ ] **Visual Telemetry**: Transition from text-based stats to sparkline graphs.
