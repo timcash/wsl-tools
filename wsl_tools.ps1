@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet("new", "daemon", "stop", "list", "fetch", "monitor", "list-json", "monitor-json", "dashboard", "ssh")]
+    [ValidateSet("new", "daemon", "stop", "list", "fetch", "monitor", "list-json", "monitor-json", "dashboard", "ssh", "delete", "unregister")]
     [string]$Command,
 
     [Parameter(Mandatory = $false, Position = 1)]
@@ -11,7 +11,7 @@ param (
 )
 
 # --- Validation for Instance-Specific Commands ---
-$InstanceSpecificCommands = @("new", "daemon", "stop", "monitor", "monitor-json", "ssh")
+$InstanceSpecificCommands = @("new", "daemon", "stop", "monitor", "monitor-json", "ssh", "delete", "unregister")
 if ($InstanceSpecificCommands -contains $Command -and -not $InstanceName) {
     Write-Error "Command '$Command' requires an instance name. Usage: .\wsl_tools.ps1 $Command <instance_name>"
     exit 1
@@ -28,16 +28,33 @@ if (-not (Test-Path $BASES_DIR)) {
     New-Item -ItemType Directory -Path $BASES_DIR | Out-Null
 }
 
+# --- Logging Configuration ---
+$LOG_FILE = Join-Path $PSScriptRoot "src\powershell.log"
+
+function Write-WslLog {
+    param($Message, $Level = "INFO")
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logLine = "[$timestamp] [$Level] $Message"
+    $logLine | Out-File -FilePath $LOG_FILE -Append -Encoding utf8
+}
+
+Write-WslLog "Command Entry: $Command $($InstanceName -join ' ')"
+
 # --- Helper Functions ---
 function Test-WSLInstanceExists {
     param($Name)
+    Write-WslLog "Checking existence for '$Name'..."
     $lines = wsl.exe -l --quiet
     # wsl -l --quiet output is often UTF-16LE with null bytes.
     # We clean it up and check for exact match.
     foreach ($line in $lines) {
         $clean = $line -replace "\x00", "" -replace "^\s+", "" -replace "\s+$", ""
-        if ($clean -eq $Name) { return $true }
+        if ($clean -eq $Name) { 
+            Write-WslLog "Instance '$Name' exists."
+            return $true 
+        }
     }
+    Write-WslLog "Instance '$Name' not found." "DEBUG"
     return $false
 }
 
@@ -87,6 +104,37 @@ function Measure-WSLInstance {
         return
     }
 
+    function Get-WSLMetrics {
+        param ( [string]$Name )
+        
+        # Use -n to avoid potential escape codes/formatting issues
+        $Mem = wsl.exe -d $Name -- free -m 2>$null | Select-String "Mem:"
+        if ($Mem) {
+            $MemParts = $Mem.ToString().Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
+            $MemVal = "$($MemParts[2])MB / $($MemParts[1])MB"
+        }
+        else {
+            $MemVal = "Unknown"
+        }
+        
+        $Disk = wsl.exe -d $Name -- df -h / 2>$null | Select-String "/$"
+        if ($Disk) {
+            $DiskParts = $Disk.ToString().Split(" ", [System.StringSplitOptions]::RemoveEmptyEntries)
+            # Handle cases where the line might be different (e.g. Alpine vs Ubuntu)
+            $DiskVal = "$($DiskParts[2]) / $($DiskParts[1])"
+        }
+        else {
+            $DiskVal = "Unknown"
+        }
+        
+        return @{
+            InstanceName = $Name
+            Memory       = $MemVal
+            Disk         = $DiskVal
+            Timestamp    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        }
+    }
+
     $uptime = wsl.exe -d $Name -- uptime
     $free = wsl.exe -d $Name -- free -m
     $df = wsl.exe -d $Name -- df -h /
@@ -119,6 +167,7 @@ function Measure-WSLInstance {
 
 function Get-WSLInstances {
     param($AsJson = $false)
+    Write-WslLog "Listing instances (JSON: $AsJson)..."
     if ($AsJson) {
         # Fix encoding: wsl output is UTF-16LE, PowerShell might read it with nulls if piped
         # We explicitly rely on string replacement to clean up the null bytes commonly seen
@@ -136,7 +185,9 @@ function Get-WSLInstances {
                 }
             }
         }
-        $parsed | ConvertTo-Json -Compress
+        $json = $parsed | ConvertTo-Json -Compress
+        Write-WslLog "Instances found: $($parsed.Count)" "DEBUG"
+        return $json
     }
     else {
         wsl.exe -l -v
@@ -148,10 +199,19 @@ function New-WSLInstance {
     
     Write-Host "Creating new WSL instance '$Name' from '$Base'..." -ForegroundColor Cyan
     
+    # Auto-resolve 'alpine' shortcut to downloaded rootfs
+    if ($Base -eq "alpine" -and -not (Test-Path $Base)) {
+        $PossibleAlpine = Join-Path $BASES_DIR "alpine.tar.gz"
+        if (Test-Path $PossibleAlpine) {
+            Write-WslLog "Auto-resolved 'alpine' to $PossibleAlpine" "DEBUG"
+            $Base = $PossibleAlpine
+        }
+    }
+    
     # 1. Validation
     if (Test-WSLInstanceExists -Name $Name) {
         Write-Error "WSL instance with name '$Name' already exists. Aborting."
-        return
+        exit 1
     }
 
     $InstallPath = Join-Path $WSL_DIR $Name
@@ -169,6 +229,7 @@ function New-WSLInstance {
         }
         catch {
             Write-Error "Failed to import WSL instance: $_"
+            exit 1
         }
     }
     else {
@@ -183,6 +244,7 @@ function New-WSLInstance {
             Write-Error "Failed to create WSL instance '$Name' from '$Base': $_"
             # Cleanup on failure if the directory was created
             if (Test-Path $InstallPath) { Remove-Item $InstallPath -Recurse -Force -ErrorAction SilentlyContinue }
+            exit 1
         }
         finally {
             if (Test-Path $TempTar) { Remove-Item $TempTar -Force }
@@ -193,22 +255,28 @@ function New-WSLInstance {
 function Start-WSLDaemon {
     param($Name)
     
+    Write-WslLog "Starting daemon for '$Name'..."
     Write-Host "Starting daemon for WSL instance '$Name'..." -ForegroundColor Cyan
     
     # Check if already running
-    $status = wsl.exe -l -v | Select-String -Pattern "^\s*\*?\s*$Name\b"
-    if ($status -match "Running") {
-        Write-Host "Instance '$Name' is already running." -ForegroundColor Yellow
-        return
+    if (Test-WSLInstanceExists -Name $Name) {
+        $status = wsl.exe -l -v | Select-String -Pattern "^\s*\*?\s*$Name\b"
+        if ($status -match "Running") {
+            Write-Host "Instance '$Name' is already running." -ForegroundColor Yellow
+            Write-WslLog "'$Name' is already running. Skipping daemon start." "DEBUG"
+            return
+        }
     }
 
     # Start a background job to keep the instance alive
+    Write-WslLog "Spawning background job: WSL_Daemon_$Name" "DEBUG"
     Start-Job -Name "WSL_Daemon_$Name" -ScriptBlock {
         param($n)
         wsl.exe -d $n -- exec sleep infinity
     } | Out-Null
 
     Write-Host "Daemon started for '$Name'. It will keep running in the background." -ForegroundColor Green
+    Write-WslLog "Daemon spawned for '$Name'."
 }
 
 function Stop-WSLInstance {
@@ -238,7 +306,7 @@ switch ($Command) {
     "monitor" { Measure-WSLInstance -Name $InstanceName -AsJson $false }
     "monitor-json" { Measure-WSLInstance -Name $InstanceName -AsJson $true }
     "dashboard" {
-        $WebDir = Join-Path $PSScriptRoot "web_v2"
+        $WebDir = Join-Path $PSScriptRoot "src"
         Write-Host "--- Dashboard Diagnostics (v2) ---" -ForegroundColor Gray
         
         # 1. Check for running Bun processes
@@ -260,9 +328,17 @@ switch ($Command) {
 
         Write-Host "`nStarting WSL Dashboard from $WebDir..." -ForegroundColor Cyan
         Set-Location $WebDir
-        bun start
+        bun run dev
     }
     "ssh" {
         wsl.exe -d $InstanceName
+    }
+    "unregister" {
+        Write-Host "Unregistering WSL instance '$InstanceName'..." -ForegroundColor Cyan
+        wsl.exe --unregister $InstanceName
+    }
+    "delete" {
+        Write-Host "Unregistering WSL instance '$InstanceName'..." -ForegroundColor Cyan
+        wsl.exe --unregister $InstanceName
     }
 }

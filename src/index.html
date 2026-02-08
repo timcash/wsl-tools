@@ -4,17 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WSL Dashboard v2 | Premium</title>
+    <title>WSL Dashboard v2</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <header class="glass">
         <div class="logo">
-            <div
-                style="width:32px; height:32px; background:hsl(var(--primary)); border-radius:8px; display:flex; align-items:center; justify-content:center; color:white; font-size:16px;">
-                W</div>
-            WSL <span>PRO</span>
+            <img src="wsl_cpu_network.png" alt="WSL Tools" style="height: 32px; width: auto; border-radius: 4px;">
         </div>
         <div style="display:flex; gap:12px;">
             <input type="text" id="new-name" placeholder="Instance Name" class="input">
@@ -32,12 +29,26 @@
         </div>
 
         <div id="fleet-grid"
-            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 24px;">
+            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 24px; margin-bottom: 40px;">
             <!-- Loading State -->
             <div class="card glass animate-in" style="grid-column: 1 / -1; text-align: center; padding: 60px;">
                 <div style="color: hsl(var(--fg-dim));">Waiting for server sync...</div>
             </div>
         </div>
+
+        <!-- Real-time PowerShell Logs -->
+        <section class="glass"
+            style="padding: 24px; border-radius: var(--radius-lg); background: hsl(var(--bg-main) / 0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3
+                    style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: hsl(var(--fg-dim));">
+                    Background Activity</h3>
+            </div>
+            <div id="ps-logs"
+                style="font-family: inherit; font-size: 13px; color: hsl(var(--fg-muted)); height: 200px; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+                <div style="color: hsl(var(--fg-dim)); font-style: italic;">Monitoring WSL orchestrator...</div>
+            </div>
+        </section>
     </main>
 
     <script src="app.js" type="module"></script>

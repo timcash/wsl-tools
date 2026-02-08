@@ -1,5 +1,5 @@
 /**
- * WSL Dashboard v2 - Premium Runtime
+ * WSL Dashboard v2
  */
 
 const state = {
@@ -9,7 +9,7 @@ const state = {
     ws: null as WebSocket | null,
 };
 
-const GRACE_PERIOD_MS = 15000; // 15 seconds for WSL operations
+const GRACE_PERIOD_MS = 120000; // 120 seconds for WSL operations
 
 // --- DOM References ---
 const fleetGrid = document.getElementById('fleet-grid')!;
@@ -33,7 +33,9 @@ function createInstanceCard(inst: any) {
                                  color: ${isRunning || isTransitioning ? '' : 'hsl(var(--fg-dim))'}">
                         ${inst.State}
                     </span>
-                    <span style="font-size: 11px; color: hsl(var(--fg-dim)); font-weight: 500;">Alpine Linux</span>
+                    <span style="font-size: 11px; color: hsl(var(--fg-dim)); font-weight: 500;">
+                        ${inst.Name.toLowerCase().includes('ubuntu') ? 'Ubuntu' : (inst.Name.toLowerCase().includes('alpine') ? 'Alpine' : 'WSL Instance')}
+                    </span>
                 </div>
             </div>
             <div style="display: flex; gap: 8px;">
@@ -83,14 +85,56 @@ function connect() {
             updateFleet(msg.data);
         } else if (msg.type === 'stats') {
             updateStats(msg.data);
+        } else if (msg.type === 'ps-log') {
+            appendPsLog(msg.data);
         }
     };
-
-    state.ws.onclose = () => {
-        console.log("[WS] Disconnected. Reconnecting...");
-        setTimeout(connect, 2000);
-    };
 }
+
+function appendPsLog(text: string) {
+    const logContainer = document.getElementById('ps-logs');
+    if (!logContainer) return;
+
+    // Clear placeholder on first log
+    if (logContainer.querySelector('div[style*="italic"]')) {
+        logContainer.innerHTML = '';
+    }
+
+    const entry = document.createElement('div');
+    entry.style.borderLeft = '2px solid hsl(var(--accent) / 0.3)';
+    entry.style.paddingLeft = '8px';
+    entry.style.lineHeight = '1.4';
+
+    // Simple color coding
+    if (text.includes('[ERROR]') || text.includes('FAILED')) {
+        entry.style.color = 'hsl(350, 80%, 60%)';
+    } else if (text.includes('[INFO]')) {
+        entry.style.color = 'hsl(var(--fg-muted))';
+    } else if (text.includes('[DEBUG]')) {
+        entry.style.color = 'hsl(var(--fg-dim))';
+        entry.style.fontSize = '12px';
+    } else {
+        entry.style.color = 'hsl(var(--fg-muted))';
+    }
+
+    const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    entry.textContent = `[${time}] ${text}`;
+
+    logContainer.appendChild(entry);
+
+    // Auto-scroll to bottom
+    logContainer.scrollTop = logContainer.scrollHeight;
+
+    // Limit to last 100 entries
+    while (logContainer.childNodes.length > 100) {
+        logContainer.removeChild(logContainer.firstChild!);
+    }
+}
+
+state.ws.onclose = () => {
+    console.log("[WS] Disconnected. Reconnecting...");
+    setTimeout(connect, 2000);
+};
 
 function ensurePlaceholder(name: string, stateLabel: string) {
     // Record transition
@@ -106,6 +150,7 @@ function ensurePlaceholder(name: string, stateLabel: string) {
         const loading = fleetGrid.querySelector('.card:not([id])');
         if (loading) loading.remove();
 
+        console.log(`[UI_DISCOVERY] Initializing placeholder for: ${name} (${stateLabel})`);
         fleetGrid.appendChild(el);
         state.instances.set(name, el);
     } else {
@@ -123,6 +168,7 @@ function ensurePlaceholder(name: string, stateLabel: string) {
 }
 
 function updateFleet(instances: any[]) {
+    console.log(`[UI_DISCOVERY] Received list with ${instances.length} instances`);
     const now = Date.now();
     const currentNames = new Set(instances.map(i => i.Name));
 
@@ -141,8 +187,8 @@ function updateFleet(instances: any[]) {
     for (const [name, el] of state.instances) {
         if (!currentNames.has(name)) {
             const trans = state.transitions.get(name);
-            // If we are "Creating", don't remove unless grace period expired
-            if (trans && trans.state === 'Creating' && (now - trans.stamp < GRACE_PERIOD_MS)) {
+            // If we are in a transition period, don't remove unless grace period expired
+            if (trans && (now - trans.stamp < GRACE_PERIOD_MS)) {
                 continue;
             }
 
@@ -169,13 +215,23 @@ function updateFleet(instances: any[]) {
         const isTransitioning = ['Creating', 'Starting', 'Stopping'].includes(displayState);
 
         if (!el) {
+            console.log(`[UI_DISCOVERY] Adding new instance from server: ${inst.Name} (${displayState})`);
             el = createInstanceCard({ ...inst, State: displayState });
+            if (displayState === 'Running') {
+                console.log(`[UI_ONLINE] Instance online: ${inst.Name}`);
+            }
             fleetGrid.appendChild(el);
             state.instances.set(inst.Name, el);
         } else {
             // Update status & visuals
             el.className = `card glass animate-in ${isTransitioning ? 'pulse' : ''}`;
             const currentBadge = el.querySelector('.badge')!;
+            const wasRunning = currentBadge.classList.contains('badge-running');
+
+            if (displayState === 'Running') {
+                console.log(`[UI_ONLINE] Instance online: ${inst.Name}`);
+            }
+
             currentBadge.className = `badge ${isRunning ? 'badge-running' : (isTransitioning ? 'badge-transition' : '')}`;
             currentBadge.textContent = displayState;
             (currentBadge as HTMLElement).style.background = isRunning || isTransitioning ? '' : 'hsl(var(--bg-accent))';
@@ -189,27 +245,41 @@ function updateFleet(instances: any[]) {
 }
 
 function updateStats(stats: any) {
+    console.log(`[UI_UPDATE] Stats updated: ${stats.InstanceName} Mem: ${stats.Memory || '--'} Disk: ${stats.Disk || '--'}`);
     const memEl = document.getElementById(`mem-${stats.InstanceName}`);
     const diskEl = document.getElementById(`disk-${stats.InstanceName}`);
 
     if (memEl && stats.Memory) {
-        const parts = stats.Memory.split(/\s+/);
-        const memIdx = parts.indexOf('Mem:');
-        if (memIdx !== -1 && parts[memIdx + 2]) {
-            memEl.textContent = `${parts[memIdx + 2]} MB`;
+        // More robust memory parsing (BusyBox vs Ubuntu/GNU)
+        const lines = stats.Memory.split('\n');
+        const memLine = lines.find((l: string) => l.includes('Mem:'));
+        if (memLine) {
+            const parts = memLine.trim().split(/\s+/);
+            // parts[0] is 'Mem:', parts[1] is total, parts[2] is used
+            if (parts[2]) {
+                memEl.textContent = `${parts[2]} MB`;
+            }
         }
     }
 
     if (diskEl && stats.Disk) {
         const lines = stats.Disk.trim().split('\n');
-        const rootLine = lines.find((l: string) => l.endsWith(' /'));
+        // Look for the root partition (/)
+        const rootLine = lines.find((l: string) => l.trim().endsWith(' /'));
         if (rootLine) {
-            const parts = rootLine.split(/\s+/);
+            const parts = rootLine.trim().split(/\s+/);
+            // df -h: Filesystem Size Used Avail Use% Mounted
+            // We want parts[2] (Used) or parts[3] (Avail)
             if (parts[2]) diskEl.textContent = parts[2];
         } else {
-            const match = stats.Disk.match(/\/\s+\d+\w+\s+(\d+\w+)/);
-            if (match) diskEl.textContent = match[1];
+            // Fallback: search for percentage or size-like string in the disk blob
+            const match = stats.Disk.match(/(\d+\.?\d*[MGK])\s+(\d+\.?\d*[MGK])\s+(\d+\.?\d*[MGK])\s+\d+%\s+\/$/m);
+            if (match && match[2]) diskEl.textContent = match[2];
         }
+    }
+
+    if (memEl?.textContent !== '--' || diskEl?.textContent !== '--') {
+        console.log(`[UI_UPDATE] Stats updated: ${stats.InstanceName} - Mem: ${memEl?.textContent}, Disk: ${diskEl?.textContent}`);
     }
 }
 
