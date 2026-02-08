@@ -8,9 +8,9 @@
     --fg-muted: 240 5% 65%;
     --fg-dim: 240 5% 45%;
 
-    --primary: 217 91% 60%;
-    /* Hyper Blue */
-    --primary-glow: 217 91% 60% / 0.15;
+    --primary: 142 71% 45%;
+    /* Emerald */
+    --primary-glow: 142 71% 45% / 0.15;
 
     --success: 142 71% 45%;
     /* Emerald */
@@ -216,6 +216,34 @@ body {
     animation: fadeIn 0.5s ease-out forwards;
 }
 
+tr.animate-in {
+    display: table-row !important;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+th, td {
+    text-align: left;
+    vertical-align: middle;
+}
+
+.fleet-table-row {
+    border-bottom: 1px solid hsl(var(--border) / 0.3);
+    transition: var(--transition);
+}
+
+.fleet-table-row:hover {
+    background: hsl(var(--fg-main) / 0.02);
+}
+
+.btn-sm {
+    padding: 6px !important;
+}
+
 /* Header */
 header {
     height: 72px;
@@ -238,7 +266,7 @@ header {
 }
 
 .logo span {
-    background: linear-gradient(135deg, hsl(var(--primary)), #a855f7);
+    background: linear-gradient(135deg, hsl(var(--primary)), #22c55e);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;

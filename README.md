@@ -1,188 +1,182 @@
-# WSL Dashboard v2
+# WSL Dashboard
 
-A high-fidelity management interface for WSL 2 instances, built for speed and visual excellence. Features real-time telemetry, automated Alpine Linux provisioning, and a "Backend-First" verification engine.
+Management interface for WSL 2 instances. Features real-time telemetry, Alpine Linux provisioning, and integrated verification.
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
-- **WSL 2** enabled on Windows.
-- **[Bun](https://bun.sh/)**: The fast all-in-one JavaScript runtime.
-- **PowerShell 5.1+**.
+- WSL 2 on Windows.
+- [Bun](https://bun.sh/).
+- PowerShell 5.1+.
 
-### Installation & Setup
+### Installation
 
-1. **Clone the Repository**:
+1. **Clone**:
    ```powershell
    git clone https://github.com/timcash/wsl-tools.git
    cd wsl-tools
    ```
 
-2. **Start the Dashboard**:
-   The dashboard manages its own dependencies and transpilation. Just run:
+2. **Run Dashboard**:
    ```powershell
    .\wsl_tools.ps1 dashboard
    ```
-   Navigate to the logged `http://localhost:PORT`.
 
-3. **Initialize Alpine (Minimal Rootfs)**:
-   For ultra-fast instance creation, fetch the mini-rootfs:
+3. **Fetch Alpine**:
    ```powershell
    .\wsl_tools.ps1 fetch alpine
    ```
 
 ---
 
-## 🛠️ CLI Reference
+## CLI Reference
 
-The `wsl_tools.ps1` script is the primary entry point for all operations.
+Entry point: `wsl_tools.ps1`.
 
 | Command | Description |
 | :--- | :--- |
-| `dashboard` | Starts the Bun dev server with live-reload enabled. |
-| `new <name> [base]` | Creates a new instance (defaults to Alpine). |
-| `daemon <name>` | Starts the instance in background mode for persistence. |
-| `stop <name>` | Gracefully stops a running instance. |
-| `delete <name>` | Unregisters and deletes an instance. |
-| `list-json` | Provides machine-readable instance states for the UI. |
-| `monitor <name>` | Real-time Linux metrics: CPU, Memory, Disk. |
+| `dashboard` | Starts the Bun server. |
+| `new <name> [base]` | Creates a new instance. |
+| `daemon <name>` | Starts instance in background. |
+| `stop <name>` | Stops a running instance. |
+| `delete <name>` | Unregisters an instance. |
+| `list-json` | Lists instances in JSON. |
+| `monitor <name>` | Shows metrics (CPU, Memory, Disk). |
 
 ---
 
-## 🧪 Automated Verification
+## Verification
 
-This project features a robust **"Backend-First"** testing strategy. The test suite verifies the physical WSL state via PowerShell before validating the UI representation via headless Puppeteer.
+Runs PowerShell commands then validates via Puppeteer.
 
-**Run the full suite**:
 ```bash
 cd src
 bun run test.ts
 ```
-*The test will automatically spawn its own dashboard server and capture visual audit screenshots.*
 
 ---
 
-## 📊 Deployment Docs
-- **[AGENT.md](AGENT.md)**: Deep-dive into the testing workflow and debugging guides.
-- **[system.md](system.md)**: Architectural overview of the dashboard state machine.
-
+## Documentation
+- **[AGENT.md](AGENT.md)**: Testing workflow and debugging.
+- **[system.md](system.md)**: Architecture overview.
 
 # Test Result
 
-**Last Run:** 2/8/2026, 9:44:23 AM  
-**Status:** ❌ FAILED  
+**Run:** 2/8/2026, 12:35:27 PM | **Status:** [PASS] PASSED
 
-### Performance Metrics
-
-| Metric | Value |
-| :--- | :--- |
-| Total Test Time | 92.61s |
-| WSL Instance Start | 30.07s |
-| SSH Latency | 52.85ms |
-| File Write Latency | 31.41ms |
-| Stats Verified | ❌ NO |
-| Online Verified | ❌ NO |
-
-### Error Summary
-
-*No errors detected.*
-
-### Visual Verification
-
-#### Initial Load
-![Initial Load](src/screenshots/screenshot_initial.png)
-
-#### After Adding Instance
-❌ FAILED: UI_ONLINE event not received
-
-#### Final State
-❌ FAILED: Final verification or Stats update failed
-
-### PowerShell Log Report
+### [PASS] 1. Backend Infrastructure Ready
 
 ```text
-[2026-02-08 09:44:08] [INFO] Instance 'Ubuntu-24.04' exists.
-[2026-02-08 09:44:11] [INFO] Command Entry: list-json 
-[2026-02-08 09:44:11] [INFO] Listing instances (JSON: True)...
-[2026-02-08 09:44:11] [DEBUG] Instances found: 2
-[2026-02-08 09:44:11] [INFO] Command Entry: monitor-json Ubuntu-24.04
-[2026-02-08 09:44:11] [INFO] Checking existence for 'Ubuntu-24.04'...
-[2026-02-08 09:44:11] [INFO] Instance 'Ubuntu-24.04' exists.
-[2026-02-08 09:44:14] [INFO] Command Entry: list-json 
-[2026-02-08 09:44:14] [INFO] Listing instances (JSON: True)...
-[2026-02-08 09:44:14] [DEBUG] Instances found: 2
-[2026-02-08 09:44:14] [INFO] Command Entry: monitor-json Ubuntu-24.04
-[2026-02-08 09:44:14] [INFO] Checking existence for 'Ubuntu-24.04'...
-[2026-02-08 09:44:14] [INFO] Instance 'Ubuntu-24.04' exists.
-[2026-02-08 09:44:17] [INFO] Command Entry: list-json 
-[2026-02-08 09:44:17] [INFO] Listing instances (JSON: True)...
-[2026-02-08 09:44:17] [DEBUG] Instances found: 2
-[2026-02-08 09:44:17] [INFO] Command Entry: monitor-json Ubuntu-24.04
-[2026-02-08 09:44:17] [INFO] Checking existence for 'Ubuntu-24.04'...
-[2026-02-08 09:44:17] [INFO] Instance 'Ubuntu-24.04' exists.
-[2026-02-08 09:44:20] [INFO] Command Entry: list-json 
-[2026-02-08 09:44:20] [INFO] Listing instances (JSON: True)...
-[2026-02-08 09:44:20] [DEBUG] Instances found: 2
-[2026-02-08 09:44:20] [INFO] Command Entry: monitor-json Ubuntu-24.04
-[2026-02-08 09:44:20] [INFO] Checking existence for 'Ubuntu-24.04'...
-[2026-02-08 09:44:20] [INFO] Instance 'Ubuntu-24.04' exists.
-[2026-02-08 09:44:23] [INFO] Command Entry: list-json 
-[2026-02-08 09:44:23] [INFO] Listing instances (JSON: True)...
-[2026-02-08 09:44:23] [DEBUG] Instances found: 2
-[2026-02-08 09:44:23] [INFO] Command Entry: monitor-json Ubuntu-24.04
-[2026-02-08 09:44:23] [INFO] Checking existence for 'Ubuntu-24.04'...
+[12:35:07] === PHASE 1: BACKEND PREP ===
+[12:35:07] [EXEC] wsl_tools.ps1 delete TDD-Unified-Final
+[12:35:07] [PS-STDOUT] Unregistering WSL instance 'TDD-Unified-Final'...
+There is no distribution with the supplied name.
+Error code: Wsl/Service/WSL_E_DISTRO_NOT_FOUND
+
+[12:35:07] [EXEC] wsl_tools.ps1 new TDD-Unified-Final alpine
+[12:35:08] [PS-STDOUT] Creating new WSL instance 'TDD-Unified-Final' from 'alpine'...
+Importing TDD-Unified-Final from C:\Users\timca\WSL\_bases\alpine.tar.gz into C:\Users\timca\WSL\TDD-Unified-Final...
+The operation completed successfully. 
+Instance 'TDD-Unified-Final' created successfully from C:\Users\timca\WSL\_bases\alpine.tar.gz.
 ```
 
-## Test Result
+### [PASS] 2. Dashboard Initial Load
 
-**Last Run:** 2/8/2026, 10:12:54 AM  
-**Status:** ❌ FAILED  
+![2. Dashboard Initial Load](src/screenshots/step_1.png)
 
-### Metrics
-
-| Metric | Status |
-| :--- | :--- |
-| Total Time | 66.20s |
-| Backend-First | ❌ Failed |
-| Live discovery | ❌ NO |
-
-### Trace
 ```text
-[10:11:47 AM] [TEST] Starting Dashboard Server internally...
-[10:11:48 AM] [TEST] Dashboard active at http://localhost:60465
-[10:11:48 AM] PHASE 1: Backend Verification (Pre-flight-Backend-Test)
-[10:11:48 AM] [BACKEND] Cleaning up potential stale instance: Pre-flight-Backend-Test
-[10:11:48 AM] [BACKEND] Running: powershell delete Pre-flight-Backend-Test
-[10:11:48 AM] [BACKEND] Running: powershell list-json
-[10:11:49 AM] [BACKEND] Initial instance count: 2
-[10:11:49 AM] [BACKEND] Running: powershell new Pre-flight-Backend-Test alpine
-[10:11:50 AM] [BACKEND] Creation successful.
-[10:11:50 AM] ✅ SUCCESS: Backend creation verified in powershell.log
-[10:11:51 AM] [BACKEND] Running: powershell list-json
-[10:11:51 AM] ✅ SUCCESS: Instance verified via list-json. Count: 3
-[10:11:51 AM] [BACKEND] Starting daemon for Pre-flight-Backend-Test
-[10:11:51 AM] [BACKEND] Running: powershell daemon Pre-flight-Backend-Test
-[10:11:51 AM] PHASE 2: Browser Verification
-[10:11:51 AM] [BROWSER][ERROR] Failed to load resource: the server responded with a status of 404 (Not Found)
-[10:11:52 AM] [BROWSER][ERROR] error-ping
-[10:11:53 AM] Checking for Pre-flight-Backend-Test in UI...
-[10:12:53 AM] ❌ FAILED: UI Online event timeout (Pre-flight-Backend-Test)
-[10:12:53 AM] ❌ FAILED: Pre-flight-Backend-Test not running or missing from UI.
-[10:12:54 AM] [TEST] Stopping Dashboard Server...
+[12:35:08] === PHASE 2: SERVER START ===
+[12:35:08] [SRV-OUT] [BUILD] Transpiling C:\Users\timca\code3\wsl-tools\src\app.ts -> C:\Users\timca\code3\wsl-tools\src\dist
+[12:35:08] [SRV-OUT] [BUILD] Success!
+[12:35:08] [SRV-OUT] [TAIL] Starting log tail on: C:\Users\timca\code3\wsl-tools\src\powershell.log
+[12:35:08] [SRV-OUT] [V2] Dashboard active at http://localhost:3001
+[12:35:09] [SRV-OUT] [HTTP] GET / (rel: )
+[12:35:09] [SRV-OUT] [HTTP] GET /style.css (rel: style.css)
+[12:35:09] [SRV-OUT] [HTTP] GET /app.js (rel: app.js)
+[12:35:09] [SRV-OUT] [HTTP] GET /wsl_cpu_network.png (rel: wsl_cpu_network.png)
+[12:35:09] [BRW-CONSOLE] [WS] Attempting connection...
+[12:35:09] [SRV-OUT] [WS] Client connected
+[12:35:09] [BRW-CONSOLE] [WS] Connected to backend
+[12:35:09] [SRV-OUT] [HTTP] GET /favicon.ico (rel: favicon.ico)
+[12:35:09] [BRW-CONSOLE] Failed to load resource: the server responded with a status of 404 (Not Found)
+[12:35:09] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
 ```
 
-### UI Errors
+### [PASS] 3. Instance Online & Telemetry Flow
 
-*No errors.*
+![3. Instance Online & Telemetry Flow](src/screenshots/step_2.png)
 
-### Visual Audit
+```text
+[12:35:09] === PHASE 3: START & TELEMETRY ===
+[12:35:09] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Starting)
+[12:35:09] [SRV-OUT] [WS] Received: {"type":"start","name":"TDD-Unified-Final"}
+[12:35:09] [SRV-OUT] [WS] Parsed Action: start on TDD-Unified-Final
+[12:35:09] [SRV-OUT] [SERVER] Executing: daemon TDD-Unified-Final
+[12:35:10] [SRV-OUT] [PS-OUT] Starting daemon for WSL instance 'TDD-Unified-Final'...
+[12:35:10] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:10] [INFO] Command Entry: daemon TDD-Unified-Final
+[12:35:10] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:10] [INFO] Request: Sta
+[12:35:10] [SRV-OUT] rt daemon for 'TDD-Unified-Final'
+[12:35:10] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:10] [INFO] Action: Detaching background process (wsl -d TDD-Unified-Final -- sleep infinity)
+[12:35:11] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: podman-machine-default
+[12:35:11] [BRW-CONSOLE] [UI_ONLINE] Instance online: test
+[12:35:11] [BRW-CONSOLE] [UI_ONLINE] Instance online: TDD-Unified-Final
+[12:35:11] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: Ubuntu-24.04
+[12:35:11] [SRV-OUT] [STATE] podman-machine-default: Unknown -> Stopped
+[12:35:11] [SRV-OUT] [STATE] test: Unknown -> Running
+[12:35:12] [SRV-OUT] [STATE] Ubuntu-24.04: Unknown -> Stopped
+[12:35:12] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 533MB / 15847MB
+[12:35:12] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Disk: 8.2M / 1006.9G
+[12:35:12] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:12] [WARN] Warning: Daemon process started but instance 'TDD-Unified-Final' still shows as [2]
+[12:35:15] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 535MB / 15847MB
+[12:35:18] [SRV-OUT] [STATE] TDD-Unified-Final: Unknown -> Running
+[12:35:18] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 538MB / 15847MB
+[12:35:18] [BRW-CONSOLE] [UI_UPDATE] Stats updated: TDD-Unified-Final Mem: 539MB / 15847MB
+[12:35:18] [BRW-CONSOLE] [UI_UPDATE] Stats updated: TDD-Unified-Final Disk: 8.2M / 1006.9G
+```
 
-#### Ready State
-![Ready](src/screenshots/screenshot_initial.png)
+### [PASS] 4. Graceful Stop via UI
 
-#### Online State
-❌ Missing
+![4. Graceful Stop via UI](src/screenshots/step_3.png)
 
-#### Final State
-❌ Missing
+```text
+[12:35:19] === PHASE 4: STOP FLOW ===
+[12:35:21] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Stopping)
+[12:35:21] [SRV-OUT] [WS] Received: {"type":"terminate","name":"TDD-Unified-Final"}
+[12:35:21] [SRV-OUT] [WS] Parsed Action: terminate on TDD-Unified-Final
+[12:35:21] [SRV-OUT] [SERVER] Executing: stop TDD-Unified-Final
+[12:35:21] [4.1] Clicked Stop button
+[12:35:21] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 539MB / 15847MB
+[12:35:21] [SRV-OUT] [PS-OUT] Stopping WSL instance 'TDD-Unified-Final'...
+[12:35:21] [SRV-OUT] [PS-OUT] The operation completed successfully.
+[12:35:21] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:21] [INFO] Command Entry: stop TDD-Unified-Final
+[12:35:21] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:21] [INFO] Request: Stop instance 'TDD-Unified-Final'
+[12:35:22] [BRW-CONSOLE] [UI_STOPPED] Instance stopped: TDD-Unified-Final
+```
+
+### [PASS] 5. Instance Unregistered & UI Cleanup
+
+![5. Instance Unregistered & UI Cleanup](src/screenshots/step_4.png)
+
+```text
+[12:35:23] === PHASE 5: DELETE FLOW ===
+[12:35:23] [SRV-OUT] [PS-OUT] Instance 'TDD-Unified-Final' stopped and background jobs cleared.
+[12:35:23] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:23] [INFO] Status: Instance 'TDD-Unified-Final' stopped.
+[12:35:24] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 500MB / 15847MB
+[12:35:25] [5.1] Triggering delete via window.app.delete evaluate...
+[12:35:25] [BRW-DIALOG] Are you sure you want to delete TDD-Unified-Final?
+[12:35:25] [BRW-CONSOLE] [UI_ACTION] Delete requested for: TDD-Unified-Final
+[12:35:25] [BRW-DIALOG] Are you sure you want to delete TDD-Unified-Final?
+[12:35:25] [SRV-OUT] [WS] Received: {"type":"delete","name":"TDD-Unified-Final"}
+[12:35:25] [SRV-OUT] [WS] Parsed Action: delete on TDD-Unified-Final
+[12:35:25] [BRW-CONSOLE] [UI_ACTION] Confirmed delete for: TDD-Unified-Final. Sending WS message.
+[12:35:25] [BRW-CONSOLE] [UI_DISCOVERY] Ensuring placeholder for: TDD-Unified-Final (Deleting)
+[12:35:25] [SRV-OUT] [SERVER] Executing: delete TDD-Unified-Final
+[12:35:25] [SRV-OUT] [PS-OUT] Unregistering WSL instance 'TDD-Unified-Final'...
+[12:35:25] [SRV-OUT] [PS-OUT] The operation completed successfully.
+[12:35:25] [SRV-OUT] [PS-LOG] [2026-02-08 12:35:25] [INFO] Command Entry: delete TDD-Unified-Final
+[12:35:26] [BRW-CONSOLE] [UI_DELETED] Instance removed: TDD-Unified-Final
+[12:35:27] [BRW-CONSOLE] [UI_UPDATE] Stats updated: test Mem: 499MB / 15847MB
+```
+

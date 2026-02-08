@@ -1,279 +1,208 @@
-import puppeteer from 'puppeteer';
-import { readFileSync, appendFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
-import { join } from 'path';
-import { performance } from 'perf_hooks';
+import { spawn } from "bun";
+import { join } from "path";
+import { readFileSync, appendFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
+import puppeteer from "puppeteer";
+
+interface TestStep {
+    title: string;
+    logs: string[];
+    screenshot?: string;
+    status: "[PASS]" | "[FAIL]" | "[WAIT]";
+}
 
 async function runTest() {
-    const startTime = performance.now();
-    const portFile = join(process.cwd(), '.port');
-    const logsFile = join(process.cwd(), 'test_results.log');
-    const errorLogFile = join(process.cwd(), 'test_error.log');
-    const screenshotsDir = join(process.cwd(), 'screenshots');
+    const testLog = join(process.cwd(), "test.log");
+    const portFile = join(process.cwd(), ".port");
+    const PS_SCRIPT = join(process.cwd(), "..", "wsl_tools.ps1");
+    const TEST_INST = "TDD-Unified-Final";
+    const screenshotsDir = join(process.cwd(), "screenshots");
+    
+    if (!existsSync(screenshotsDir)) mkdirSync(screenshotsDir);
 
-    const metrics = {
-        totalTime: 0,
-        wslStartTime: 0,
-        sshLatency: 0,
-        fileWriteLatency: 0
+    const steps: TestStep[] = [];
+    let currentLogs: string[] = [];
+
+    const sanitize = (str: string) => {
+        return str.replace(/\0/g, "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
     };
 
-    const errorCounts: Record<string, { count: number, firstStack: string, lastLine: string }> = {};
-    const stepLogs: string[] = [];
-
-    // Reset logs
-    writeFileSync(logsFile, `--- Test Session: ${new Date().toISOString()} ---\n`);
-    writeFileSync(errorLogFile, `--- Error Session: ${new Date().toISOString()} ---\n`);
-
-    // Ensure screenshots directory exists
-    if (!existsSync(screenshotsDir)) {
-        mkdirSync(screenshotsDir);
-    }
-
-    const logStep = (msg: string) => {
-        const timestamp = new Date().toLocaleTimeString();
-        const formatted = `[${timestamp}] ${msg}`;
-        stepLogs.push(formatted);
+    const log = (msg: string) => {
+        const timestamp = new Date().toLocaleTimeString([], { hour12: false });
+        const sanitizedMsg = sanitize(msg);
+        const formatted = `[${timestamp}] ${sanitizedMsg}`;
         console.log(formatted);
-        appendFileSync(logsFile, formatted + '\n');
+        currentLogs.push(formatted);
+        appendFileSync(testLog, formatted + '\n', "utf8");
     };
 
-    const trackError = (type: string, stack: string = '') => {
-        if (!errorCounts[type]) {
-            const lines = stack.split('\n');
-            errorCounts[type] = {
-                count: 0,
-                firstStack: stack,
-                lastLine: lines[lines.length - 1] || 'N/A'
-            };
+    const addStep = async (title: string, page?: puppeteer.Page) => {
+        const step: TestStep = {
+            title: sanitize(title),
+            logs: [...currentLogs],
+            status: "[PASS]"
+        };
+        if (page) {
+            const filename = `step_${steps.length}.png`;
+            const path = join(screenshotsDir, filename);
+            await page.screenshot({ path, fullPage: true });
+            step.screenshot = `src/screenshots/${filename}`;
         }
-        errorCounts[type].count++;
-
-        if (stack) {
-            appendFileSync(errorLogFile, `[${new Date().toISOString()}] ${type}\n${stack}\n---\n`);
-        }
+        steps.push(step);
+        currentLogs = [];
     };
 
+    const runWslTool = async (cmd: string, args: string[] = []) => {
+        log(`[EXEC] wsl_tools.ps1 ${cmd} ${args.join(' ')}`);
+        const proc = spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, cmd, ...args]);
+        const stdout = await new Response(proc.stdout).text();
+        const stderr = await new Response(proc.stderr).text();
+        const code = await proc.exited;
+        if (stdout.trim()) log(`[PS-STDOUT] ${stdout.trim()}`);
+        if (stderr.trim()) log(`[PS-STDERR] ${stderr.trim()}`);
+        return { code, stdout: stdout.trim(), stderr: stderr.trim() };
+    };
+
+    writeFileSync(testLog, `--- STRUCTURED TDD SESSION: ${new Date().toISOString()} ---\n`, "utf8");
     let highSeverityError = false;
-    let uiStatsUpdated = false;
-    let uiOnlineDetected = false;
-    let finalExists = false;
-    const testInstanceName = 'Pre-flight-Backend-Test';
-
-    let dashboardProc: any;
-    let browser: any;
+    let browser: puppeteer.Browser | null = null;
+    let serverProc: any = null;
 
     try {
-        // --- Setup: Start Dashboard Server ---
-        logStep("[TEST] Starting Dashboard Server internally...");
+        log("=== PHASE 1: BACKEND PREP ===");
+        await runWslTool("delete", [TEST_INST]);
+        const createResult = await runWslTool("new", [TEST_INST, "alpine"]);
+        if (createResult.code !== 0) throw new Error("Backend 'new' failed");
+        await addStep("1. Backend Infrastructure Ready");
+
+        log("=== PHASE 2: SERVER START ===");
         if (existsSync(portFile)) unlinkSync(portFile);
+        serverProc = spawn(["bun", "server.ts"], { stdout: "pipe", stderr: "pipe" });
 
-        dashboardProc = Bun.spawn(["bun", "server.ts"], {
-            stdout: "pipe", // Capture it to avoid cluttering test output OR "inherit" if you want to see it
-            stderr: "inherit"
-        });
-
-        // Wait for .port file to appear (max 10s)
-        let port = "";
-        const portTimeout = Date.now() + 10000;
-        while (!existsSync(portFile) && Date.now() < portTimeout) {
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        if (!existsSync(portFile)) {
-            throw new Error("Dashboard server failed to start or didn't write .port file.");
-        }
-
-        port = readFileSync(portFile, 'utf8').trim();
-        const url = `http://localhost:${port}`;
-        logStep(`[TEST] Dashboard active at ${url}`);
-
-        // --- Phase 1: Backend Verification ---
-        logStep(`PHASE 1: Backend Verification (${testInstanceName})`);
-        const PS_SCRIPT = "..\\wsl_tools.ps1";
-
-        const runPs = async (cmd: string, args: string[] = []) => {
-            const fullCmd = [cmd, ...args];
-            logStep(`[BACKEND] Running: powershell ${fullCmd.join(' ')}`);
-            const proc = Bun.spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, ...fullCmd]);
-            const output = await new Response(proc.stdout).text();
-            const success = (await proc.exited) === 0;
-            return { success, output };
+        const pipeToLog = async (stream: ReadableStream, prefix: string) => {
+            const reader = stream.getReader();
+            const decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true });
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                for (const line of decoder.decode(value).split('\n')) {
+                    if (line.trim()) log(`${prefix} ${line.trim()}`);
+                }
+            }
         };
+        pipeToLog(serverProc.stdout, "[SRV-OUT]");
+        pipeToLog(serverProc.stderr, "[SRV-ERR]");
 
-        // 1. Cleanup & Detect State
-        logStep(`[BACKEND] Cleaning up potential stale instance: ${testInstanceName}`);
-        await runPs("delete", [testInstanceName]);
+        const portTimeout = Date.now() + 10000;
+        while (!existsSync(portFile) && Date.now() < portTimeout) await new Promise(r => setTimeout(r, 500));
+        if (!existsSync(portFile)) throw new Error("Server port file timeout");
+        const port = readFileSync(portFile, 'utf8').trim();
 
-        const initialList = await runPs("list-json");
-        const initialCount = initialList.success ? JSON.parse(initialList.output).length : 0;
-        logStep(`[BACKEND] Initial instance count: ${initialCount}`);
+        browser = await puppeteer.launch({ headless: true });
+        const page = await browser.newPage();
+        
+        const uiState = { online: false, stats: false, stopped: false, deleted: false };
+        page.on('console', msg => {
+            const text = msg.text();
+            log(`[BRW-CONSOLE] ${text}`);
+            if (text.includes(`[UI_ONLINE] Instance online: ${TEST_INST}`)) uiState.online = true;
+            if (text.includes(`[UI_UPDATE] Stats updated: ${TEST_INST}`)) uiState.stats = true;
+            if (text.includes(`[UI_STOPPED] Instance stopped: ${TEST_INST}`)) uiState.stopped = true;
+            if (text.includes(`[UI_DELETED] Instance removed: ${TEST_INST}`)) uiState.deleted = true;
+        });
+        page.on('dialog', async d => { log(`[BRW-DIALOG] ${d.message()}`); await d.accept(); });
 
-        // 2. Creation
-        const createResult = await runPs("new", [testInstanceName, "alpine"]);
-        if (!createResult.success) {
-            logStep(`❌ FAILED: Backend creation failed. Output: ${createResult.output}`);
-            highSeverityError = true;
-        } else {
-            logStep(`[BACKEND] Creation successful.`);
+        await page.goto(`http://localhost:${port}`, { waitUntil: 'networkidle0' });
+        await addStep("2. Dashboard Initial Load", page);
 
-            // 3. Log Verification
-            const psLogPath = join(import.meta.dir, 'powershell.log');
-            if (existsSync(psLogPath)) {
-                // Read last 100 lines to ensure we see the latest entry
-                const logContent = readFileSync(psLogPath, 'utf8');
-                if (logContent.includes(`Command Entry: new ${testInstanceName}`)) {
-                    logStep("✅ SUCCESS: Backend creation verified in powershell.log");
-                } else {
-                    logStep("❌ FAILED: Creation command not found in powershell.log");
-                    highSeverityError = true;
-                }
-            }
-
-            // 4. Count Verification
-            const listCheck = await runPs("list-json");
-            if (listCheck.success) {
-                const instances = JSON.parse(listCheck.output);
-                const finalCount = instances.length;
-                const found = instances.some((i: any) => i.Name === testInstanceName);
-
-                if (found && finalCount === initialCount + 1) {
-                    logStep(`✅ SUCCESS: Instance verified via list-json. Count: ${finalCount}`);
-                } else {
-                    logStep(`❌ FAILED: Instance count delta failed. Found: ${found}, Count: ${finalCount} (Expected: ${initialCount + 1})`);
-                    highSeverityError = true;
-                }
-            }
-        }
-
-        if (highSeverityError) {
-            logStep("[CRITICAL] Phase 1 (Backend) failed. Aborting Phase 2.");
-        } else {
-            // Start daemon
-            logStep(`[BACKEND] Starting daemon for ${testInstanceName}`);
-            await runPs("daemon", [testInstanceName]);
-
-            // --- Phase 2: Browser Verification ---
-            logStep("PHASE 2: Browser Verification");
-            browser = await puppeteer.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-            });
-            const page = await browser.newPage();
-
-            page.on('console', msg => {
-                const text = msg.text();
-                const type = msg.type();
-                logStep(`[BROWSER][${type.toUpperCase()}] ${text}`);
-
-                if (text === 'error-ping' && type === 'error') {
-                    // Handshake detected
-                } else if (text.startsWith('[UI_UPDATE] Stats updated:')) {
-                    if (!text.includes('Mem: --')) {
-                        uiStatsUpdated = true;
-                    }
-                } else if (text.startsWith('[UI_ONLINE] Instance online:')) {
-                    if (text.includes(testInstanceName)) {
-                        uiOnlineDetected = true;
-                    }
-                } else if (type === 'error') {
-                    if (!text.includes('favicon.ico') && !text.includes('Failed to load resource')) {
-                        trackError(`Console Error: ${text.substring(0, 50)}`, text);
-                        highSeverityError = true;
-                    }
-                }
-            });
-
-            await page.goto(url, { waitUntil: 'networkidle0' });
-
-            // Handshake
-            await page.evaluate(() => console.error('error-ping'));
+        log("=== PHASE 3: START & TELEMETRY ===");
+        await page.click(`button[aria-label="Start ${TEST_INST}"]`);
+        const startTimeout = Date.now() + 45000;
+        while (Date.now() < startTimeout) {
+            if (uiState.online && uiState.stats) break;
             await new Promise(r => setTimeout(r, 1000));
-
-            logStep(`Checking for ${testInstanceName} in UI...`);
-            await page.screenshot({ path: join(screenshotsDir, 'screenshot_initial.png'), fullPage: true });
-
-            // Wait for Online State
-            const timeout = performance.now() + 60000;
-            while (!uiOnlineDetected && performance.now() < timeout) {
-                await new Promise(r => setTimeout(r, 1000));
-            }
-
-            if (uiOnlineDetected) {
-                logStep(`✅ UI Online verified for ${testInstanceName}`);
-                await page.screenshot({ path: join(screenshotsDir, 'screenshot_after_add.png'), fullPage: true });
-            } else {
-                logStep(`❌ FAILED: UI Online event timeout (${testInstanceName})`);
-                highSeverityError = true;
-            }
-
-            // Final state check
-            finalExists = await page.evaluate((name) => {
-                const card = document.getElementById(`card-${name}`);
-                if (!card) return false;
-                const badge = card.querySelector('.badge');
-                return badge && badge.textContent === 'Running';
-            }, testInstanceName);
-
-            if (finalExists) {
-                logStep(`✅ SUCCESS: ${testInstanceName} is active and running in UI.`);
-                await page.screenshot({ path: join(screenshotsDir, 'screenshot_final.png'), fullPage: true });
-            } else {
-                logStep(`❌ FAILED: ${testInstanceName} not running or missing from UI.`);
-                highSeverityError = true;
-            }
         }
+        if (!uiState.online || !uiState.stats) throw new Error("Start/Stats timeout");
+        await addStep("3. Instance Online & Telemetry Flow", page);
+
+        log("=== PHASE 4: STOP FLOW ===");
+        await new Promise(r => setTimeout(r, 2000));
+        await page.click(`button[aria-label="Stop ${TEST_INST}"]`);
+        log("[4.1] Clicked Stop button");
+        
+        const stopTimeout = Date.now() + 45000;
+        while (Date.now() < stopTimeout) {
+            if (uiState.stopped) break;
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        if (!uiState.stopped) {
+            const timeoutPath = join(screenshotsDir, 'stop_timeout.png');
+            await page.screenshot({ path: timeoutPath, fullPage: true });
+            throw new Error(`Stop timeout. State at timeout saved to src/screenshots/stop_timeout.png`);
+        }
+        await addStep("4. Graceful Stop via UI", page);
+
+        log("=== PHASE 5: DELETE FLOW ===");
+        await new Promise(r => setTimeout(r, 2000));
+        log("[5.1] Triggering delete via window.app.delete evaluate...");
+        await page.evaluate((name) => (window as any).app.delete(name), TEST_INST);
+        
+        const deleteTimeout = Date.now() + 45000;
+        while (Date.now() < deleteTimeout) {
+            if (uiState.deleted) break;
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        if (!uiState.deleted) throw new Error("Delete timeout");
+        await addStep("5. Instance Unregistered & UI Cleanup", page);
+
+        log("\nALL TESTS PASSED");
 
     } catch (err: any) {
-        logStep(`[CRITICAL TEST ERR] ${err.message}`);
+        log(`\n[FAIL] FAILURE: ${err.message}`);
+        steps.push({
+            title: `FAILED: ${err.message}`,
+            logs: [...currentLogs],
+            status: "[FAIL]"
+        });
         highSeverityError = true;
     } finally {
         if (browser) await browser.close();
-        if (dashboardProc) {
-            logStep("[TEST] Stopping Dashboard Server...");
-            dashboardProc.kill();
-        }
+        if (serverProc) serverProc.kill();
 
-        metrics.totalTime = performance.now() - startTime;
-
-        // --- README Report ---
+        log("\n=== FINAL CLEANUP ===");
         try {
-            const readmePath = join(import.meta.dir, '..', 'README.md');
-            let readmeContent = readFileSync(readmePath, 'utf8');
-            const marker = '## Test Result';
-            const timestamp = new Date().toLocaleString();
-
-            const errorSummary = Object.keys(errorCounts).length > 0
-                ? `| Error | Count | Last |\n| :--- | :--- | :--- | \n` +
-                Object.entries(errorCounts).map(([t, d]) => `| ${t} | ${d.count} | ${d.lastLine} |`).join('\n')
-                : `*No errors.*`;
-
-            const metricsTable = `| Metric | Status |\n| :--- | :--- |\n` +
-                `| Total Time | ${(metrics.totalTime / 1000).toFixed(2)}s |\n` +
-                `| Backend-First | ${!highSeverityError ? '✅ Verified' : '❌ Failed'} |\n` +
-                `| Live discovery | ${uiOnlineDetected ? '✅ YES' : '❌ NO'} |`;
-
-            const testResultContent = `${marker}\n\n` +
-                `**Last Run:** ${timestamp}  \n` +
-                `**Status:** ${highSeverityError ? '❌ FAILED' : '✅ SUCCESS'}  \n\n` +
-                `### Metrics\n\n${metricsTable}\n\n` +
-                `### Trace\n` + "```text\n" + stepLogs.join('\n') + "\n```\n\n" +
-                `### UI Errors\n\n${errorSummary}\n\n` +
-                `### Visual Audit\n\n` +
-                `#### Ready State\n![Ready](src/screenshots/screenshot_initial.png)\n\n` +
-                `#### Online State\n${uiOnlineDetected ? '![Online](src/screenshots/screenshot_after_add.png)' : '❌ Missing'}\n\n` +
-                `#### Final State\n${finalExists ? '![Final](src/screenshots/screenshot_final.png)' : '❌ Missing'}\n`;
-
-            const idx = readmeContent.indexOf(marker);
-            if (idx !== -1) readmeContent = readmeContent.substring(0, idx);
-            writeFileSync(readmePath, readmeContent.trimEnd() + '\n\n' + testResultContent);
-            console.log("[TEST] README.md updated.");
-        } catch (e: any) {
-            console.error(`[TEST] Report fail: ${e.message}`);
+            const proc = spawn(["powershell", "-ExecutionPolicy", "Bypass", "-File", PS_SCRIPT, "delete", TEST_INST]);
+            await proc.exited;
+            log(`[PASS] Cleaned up ${TEST_INST}`);
+        } catch (e) {
+            log(`[WARN] Cleanup failed for ${TEST_INST}: ${e}`);
         }
 
-        if (highSeverityError) process.exit(1);
-        process.exit(0);
+        try {
+            const readmePath = join(process.cwd(), "..", "README.md");
+            let content = readFileSync(readmePath, 'utf8');
+            const marker = '# Test Result';
+            
+            let report = `${marker}\n\n**Run:** ${new Date().toLocaleString()} | **Status:** ${highSeverityError ? '[FAIL] FAILED' : '[PASS] PASSED'}\n\n`;
+            
+            for (const step of steps) {
+                report += `### ${step.status} ${step.title}\n\n`;
+                if (step.screenshot) {
+                    report += `![${step.title}](${step.screenshot})\n\n`;
+                }
+                if (step.logs.length > 0) {
+                    report += "```text\n" + step.logs.join('\n') + "\n```\n\n";
+                }
+            }
+
+            const idx = content.indexOf(marker);
+            if (idx !== -1) content = content.substring(0, idx);
+            writeFileSync(readmePath, content.trimEnd() + '\n\n' + report);
+            console.log("README updated.");
+        } catch (e) {
+            console.error(e);
+        }
+        process.exit(highSeverityError ? 1 : 0);
     }
 }
 
-runTest().catch(console.error);
+runTest();

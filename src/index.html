@@ -28,12 +28,26 @@
             </div>
         </div>
 
-        <div id="fleet-grid"
-            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 24px; margin-bottom: 40px;">
-            <!-- Loading State -->
-            <div class="card glass animate-in" style="grid-column: 1 / -1; text-align: center; padding: 60px;">
-                <div style="color: hsl(var(--fg-dim));">Waiting for server sync...</div>
-            </div>
+        <div class="glass" style="border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 32px;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                <thead style="background: hsl(var(--bg-accent) / 0.5); border-bottom: 1px solid hsl(var(--border)); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: hsl(var(--fg-dim));">
+                    <tr>
+                        <th style="padding: 12px 24px; width: 40%;">Instance</th>
+                        <th style="padding: 12px 24px;">Status</th>
+                        <th style="padding: 12px 24px;">Memory</th>
+                        <th style="padding: 12px 24px;">Storage</th>
+                        <th style="padding: 12px 24px; text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="fleet-grid">
+                    <!-- Loading State -->
+                    <tr id="loading-row">
+                        <td colspan="5" style="text-align: center; padding: 40px; color: hsl(var(--fg-dim));">
+                            Waiting for server sync...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
         <!-- Real-time PowerShell Logs -->
