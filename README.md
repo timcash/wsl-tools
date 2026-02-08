@@ -1,91 +1,72 @@
-# WSL Tools
+# WSL Dashboard v2
 
-Manage WSL instances using Alpine Linux and real-time monitoring.
-
----
-
-## Quick Start (Alpine Minimal)
-
-1.  **Start Dashboard**:
-    ```powershell
-    .\wsl_tools.ps1 dashboard
-    ```
-2.  **Fetch Alpine rootfs**:
-    ```powershell
-    .\wsl_tools.ps1 alpine fetch
-    ```
-2.  **Create & Start Environment**:
-    ```powershell
-    # Creates an Alpine instance (nearly instant)
-    .\wsl_tools.ps1 new my-env
-    # Starts the instance in the background
-    .\wsl_tools.ps1 daemon my-env
-    ```
+A high-fidelity management interface for WSL 2 instances, built for speed and visual excellence. Features real-time telemetry, automated Alpine Linux provisioning, and a "Backend-First" verification engine.
 
 ---
 
-## Web Dashboard
+## 🚀 Getting Started
 
-A real-time fleet management interface with row-based metrics and D3.js visualizations.
+### Prerequisites
+- **WSL 2** enabled on Windows.
+- **[Bun](https://bun.sh/)**: The fast all-in-one JavaScript runtime.
+- **PowerShell 5.1+**.
 
-### Features
-- **Instant Lifecycles**: Default Alpine-based creation in seconds.
-- **Daemon Control**: Start/Stop instances directly from the browser.
-- **Provisioning**: execute shell commands (e.g., `apk add git`) via WebSocket.
-- **Live Graphs**: Moving-window D3.js memory metrics.
+### Installation & Setup
 
-### Running the Dashboard
-```bash
-cd web_v2
-bun install
-bun start
-```
-Navigate to the logged `http://localhost:PORT`.
+1. **Clone the Repository**:
+   ```powershell
+   git clone https://github.com/timcash/wsl-tools.git
+   cd wsl-tools
+   ```
+
+2. **Start the Dashboard**:
+   The dashboard manages its own dependencies and transpilation. Just run:
+   ```powershell
+   .\wsl_tools.ps1 dashboard
+   ```
+   Navigate to the logged `http://localhost:PORT`.
+
+3. **Initialize Alpine (Minimal Rootfs)**:
+   For ultra-fast instance creation, fetch the mini-rootfs:
+   ```powershell
+   .\wsl_tools.ps1 fetch alpine
+   ```
 
 ---
 
-## CLI Reference
+## 🛠️ CLI Reference
 
-Syntax:
-```powershell
-.\wsl_tools.ps1 <command> [<instance_name>] [<base_distro_or_path>]
-```
+The `wsl_tools.ps1` script is the primary entry point for all operations.
 
 | Command | Description |
 | :--- | :--- |
-| `fetch` | Downloads Alpine minirootfs for fast initialization. |
-| `new` | Creates a new instance. Defaults to Alpine for speed. |
-| `daemon` | Keeps the instance alive via background spawn. |
-| `stop` | Gracefully terminates the instance and cleanup. |
-| `monitor` | Linux metrics: `uptime`, `free`, `df`, `ip link`. |
-| `dashboard` | Starts the Bun web server for the visual dashboard. |
-| `list` | Lists all registered WSL instances. |
-| `list-json` | JSON output for dashboard integration. |
+| `dashboard` | Starts the Bun dev server with live-reload enabled. |
+| `new <name> [base]` | Creates a new instance (defaults to Alpine). |
+| `daemon <name>` | Starts the instance in background mode for persistence. |
+| `stop <name>` | Gracefully stops a running instance. |
+| `delete <name>` | Unregisters and deletes an instance. |
+| `list-json` | Provides machine-readable instance states for the UI. |
+| `monitor <name>` | Real-time Linux metrics: CPU, Memory, Disk. |
 
 ---
 
-## Automated Verification
+## 🧪 Automated Verification
 
-### Dashboard Lifecycle Test
-Verifies the full loop from creation to provisioning:
+This project features a robust **"Backend-First"** testing strategy. The test suite verifies the physical WSL state via PowerShell before validating the UI representation via headless Puppeteer.
+
+**Run the full suite**:
 ```bash
 cd src
 bun run test.ts
 ```
-**Test Flow**: Creation -> Detection -> Start -> `apk add git bash` -> `git clone dialtone`.
-
-### Complex Integration
-```powershell
-.\test_complex_setup.ps1
-```
-Mirrors the dashboard provisioning logic in pure PowerShell.
+*The test will automatically spawn its own dashboard server and capture visual audit screenshots.*
 
 ---
 
-## Requirements
-- WSL 2
-- PowerShell 5.1+
-- Bun (for Dashboard & Tests)
+## 📊 Deployment Docs
+- **[AGENT.md](AGENT.md)**: Deep-dive into the testing workflow and debugging guides.
+- **[system.md](system.md)**: Architectural overview of the dashboard state machine.
+
 
 # Test Result
 
